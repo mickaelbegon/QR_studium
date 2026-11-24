@@ -19,6 +19,9 @@ npm start
 Sous Windows, un double-clic sur `lancer.bat` fait la même chose. L'application s'ouvre à
 l'adresse http://localhost:5173.
 
+Si PowerShell répond « l'exécution de scripts est désactivée sur ce système », utilisez
+`lancer.bat` ou tapez `npm.cmd start` à la place de `npm start`.
+
 ## Utilisation
 
 1. Dans StudiUM : *Banque de questions › Exporter › Format Moodle XML*.
@@ -44,6 +47,9 @@ d'ajouter au test toutes les questions de cette catégorie.
 - Historique des versions de chaque question, avec restauration.
 - Statut et note privée par question (non exportés).
 - Examens : sélection, ordre, total des points, export XML, impression (copie et corrigé).
+- Rapport d'analyse (JSON) : notes de révision rattachées aux questions par l'étiquette
+  `id-origine-<ID>` (pertinence, direction, problème, correction proposée), filtres associés,
+  vue d'ensemble (défauts récurrents, lacunes, questions suggérées) et export des notes à jour.
 
 ## Données privées
 

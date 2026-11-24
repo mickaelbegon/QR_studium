@@ -1,19 +1,22 @@
 // Stockage local (IndexedDB du navigateur) : rien ne quitte le poste.
 import type { Category, Exam, Question, Version } from './model'
+import type { Report } from './report'
 
 const NAME = 'qr_studium'
 let dbp: Promise<IDBDatabase> | null = null
 
 function open(): Promise<IDBDatabase> {
   dbp ??= new Promise((resolve, reject) => {
-    const req = indexedDB.open(NAME, 1)
+    const req = indexedDB.open(NAME, 2)
     req.onupgradeneeded = () => {
       const db = req.result
-      db.createObjectStore('questions', { keyPath: 'id' })
-      db.createObjectStore('categories', { keyPath: 'path' })
-      db.createObjectStore('files', { keyPath: 'hash' })
-      db.createObjectStore('exams', { keyPath: 'id' })
-      db.createObjectStore('versions', { keyPath: 'vid', autoIncrement: true }).createIndex('qid', 'qid')
+      const has = (s: string) => db.objectStoreNames.contains(s)
+      if (!has('questions')) db.createObjectStore('questions', { keyPath: 'id' })
+      if (!has('categories')) db.createObjectStore('categories', { keyPath: 'path' })
+      if (!has('files')) db.createObjectStore('files', { keyPath: 'hash' })
+      if (!has('exams')) db.createObjectStore('exams', { keyPath: 'id' })
+      if (!has('versions')) db.createObjectStore('versions', { keyPath: 'vid', autoIncrement: true }).createIndex('qid', 'qid')
+      if (!has('reports')) db.createObjectStore('reports', { keyPath: 'name' })
     }
     req.onsuccess = () => resolve(req.result)
     req.onerror = () => reject(req.error)
@@ -45,6 +48,9 @@ export const loadQuestions = () => all<Question>('questions')
 export const loadCategories = () => all<Category>('categories')
 export const loadFiles = () => all<{ hash: string; data: string }>('files')
 export const loadExams = () => all<Exam>('exams')
+export const loadReports = () => all<Report>('reports')
+export const putReport = (r: Report) => putAll('reports', [r])
+export const deleteReport = (name: string) => del('reports', [name])
 
 export const putQuestions = (qs: Question[]) => putAll('questions', qs)
 export const deleteQuestions = (ids: string[]) => del('questions', ids)
@@ -61,6 +67,6 @@ export async function getVersions(qid: string): Promise<Version[]> {
 }
 
 export const clearAll = () =>
-  run(['questions', 'categories', 'files', 'exams', 'versions'], 'readwrite', (tx) => {
-    for (const s of ['questions', 'categories', 'files', 'exams', 'versions']) tx.objectStore(s).clear()
+  run(['questions', 'categories', 'files', 'exams', 'versions', 'reports'], 'readwrite', (tx) => {
+    for (const s of ['questions', 'categories', 'files', 'exams', 'versions', 'reports']) tx.objectStore(s).clear()
   })

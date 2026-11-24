@@ -72,7 +72,10 @@ export function QuestionPreview({ q, showAnswers = true }: { q: Question; showAn
             {q.answers.map((a) => (
               <li key={a.k} className={pct(a.fraction) >= 100 ? 'ok' : pct(a.fraction) > 0 ? 'part' : ''}>
                 <div className="grow">
-                  <div className="html">{a.rt.text}</div>
+                  <div className="html">
+                    {a.rt.text}
+                    {q.type === 'numerical' && ` ± ${/<tolerance>([^<]*)<\/tolerance>/.exec(a.extra.join(''))?.[1] ?? '0'}`}
+                  </div>
                   {plain(a.feedback?.text) && <Html className="fb" rt={a.feedback} />}
                 </div>
                 <span className="frac">{pct(a.fraction)} %</span>

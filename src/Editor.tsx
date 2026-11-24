@@ -90,6 +90,15 @@ function FractionSelect({ value, onChange }: { value: string; onChange: (v: stri
   )
 }
 
+const TOL = /<tolerance>([^<]*)<\/tolerance>/
+export const tolerance = (a: Answer): string => a.extra.map((x) => TOL.exec(x)?.[1]).find((t) => t !== undefined) ?? ''
+function setTolerance(a: Answer, value: string) {
+  const xml = `<tolerance>${value.replace(/[<&]/g, '')}</tolerance>`
+  const i = a.extra.findIndex((x) => TOL.test(x))
+  if (i >= 0) a.extra[i] = xml
+  else a.extra.push(xml)
+}
+
 const newAnswer = (format: string | undefined): Answer => ({ k: uid(), fraction: '0', rt: emptyRt(format), feedback: emptyRt('html'), extra: [] })
 
 export function QuestionEditor({ question, categories, onSave, onCancel, onDirty }: { question: Question; categories: Category[]; onSave: (q: Question, note: string) => void; onCancel: () => void; onDirty: () => void }) {
@@ -249,7 +258,15 @@ export function QuestionEditor({ question, categories, onSave, onCancel, onDirty
                 {d.type === 'multichoice' ? (
                   <RichTextEditor compact placeholder="Texte du choix" value={a.rt} onChange={(v) => mut((q) => (q.answers[i].rt = v))} />
                 ) : (
-                  <input className="wide" placeholder="Réponse" value={a.rt.text} onChange={(e) => mut((q) => (q.answers[i].rt.text = e.target.value))} />
+                  <div className="row">
+                    <input className="grow" placeholder="Réponse" value={a.rt.text} onChange={(e) => mut((q) => (q.answers[i].rt.text = e.target.value))} />
+                    {d.type === 'numerical' && (
+                      <label>
+                        Tolérance (±)
+                        <input style={{ width: 90 }} value={tolerance(a)} onChange={(e) => mut((q) => setTolerance(q.answers[i], e.target.value))} />
+                      </label>
+                    )}
+                  </div>
                 )}
                 <RichTextEditor compact placeholder="Rétroaction pour ce choix (facultative)" value={a.feedback ?? emptyRt('html')} onChange={(v) => mut((q) => (q.answers[i].feedback = v))} />
               </div>

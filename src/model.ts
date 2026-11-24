@@ -36,9 +36,25 @@ export interface SubQuestion {
 
 export type Status = '' | 'brouillon' | 'a_reviser' | 'validee'
 
+/** Note de révision : dans quelle direction retravailler la question (issue d'un rapport JSON ou saisie ici). */
+export interface Review {
+  origine?: number
+  pertinence: string
+  direction: string
+  theme: string
+  probleme: string
+  correction: string
+  cle: string
+  doublons: number[]
+  edited?: boolean
+}
+
+export const emptyReview = (): Review => ({ pertinence: '', direction: '', theme: '', probleme: '', correction: '', cle: '', doublons: [] })
+
 export interface QuestionMeta {
   status: Status
   note: string
+  review?: Review
   source?: string
   order: number
   created: number
@@ -141,7 +157,8 @@ export function allTexts(q: Question): RichText[] {
 
 export function searchText(q: Question): string {
   const parts = allTexts(q).map((rt) => plain(rt.text))
-  parts.push(...q.subquestions.map((s) => s.answer), ...q.tags, getProp(q, 'idnumber') ?? '', q.meta.note)
+  const r = q.meta.review
+  parts.push(...q.subquestions.map((s) => s.answer), ...q.tags, getProp(q, 'idnumber') ?? '', q.meta.note, r?.probleme ?? '', r?.correction ?? '', r?.cle ?? '')
   return fold(parts.join(' '))
 }
 
@@ -218,6 +235,9 @@ export const TYPES: Record<string, { label: string; short: string }> = {
   shortanswer: { label: 'Réponse courte', short: 'RC' },
   numerical: { label: 'Numérique', short: 'NUM' },
   essay: { label: 'Composition', short: 'COMP' },
+  ddwtos: { label: 'Glisser-déposer sur texte', short: 'GDT' },
+  ddimageortext: { label: 'Glisser-déposer sur image', short: 'GDI' },
+  gapselect: { label: 'Sélection des mots manquants', short: 'MOTS' },
   description: { label: 'Description', short: 'DESC' },
 }
 export const typeLabel = (t: string): string => TYPES[t]?.label ?? t

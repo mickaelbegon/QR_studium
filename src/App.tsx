@@ -4,13 +4,15 @@ import { QuestionEditor } from './Editor'
 import { ExamsView, PrintSheet, points } from './Exams'
 import { fileData } from './files'
 import { type Issue, findDuplicates, lintQuestion, worst } from './lint'
-import { CREATABLE, type Exam, type Question, SEP, STATUS, type Status, type Version, categoryKey, categoryLabel, categoryParts, fold, getProp, getText, newQuestion, plain, qName, searchText, typeLabel, typeShort } from './model'
+import { CREATABLE, type Exam, type Question, SEP, emptyRt, setProp, setText, uid, STATUS, type Status, type Version, categoryKey, categoryLabel, categoryParts, fold, getProp, getText, newQuestion, plain, qName, searchText, typeLabel, typeShort } from './model'
 import { serializeBank } from './moodleXml'
 import { Issues, QuestionPreview } from './Preview'
+import { type Report, type Suggestion, exportReport } from './report'
+import { DIRECTIONS, PERTINENCES, ReportView, ReviewBox, directionClass } from './ReviewPanel'
 import { useBank } from './store'
 
-function download(name: string, xml: string) {
-  const url = URL.createObjectURL(new Blob([xml], { type: 'application/xml' }))
+function download(name: string, xml: string, type = 'application/xml') {
+  const url = URL.createObjectURL(new Blob([xml], { type }))
   const a = document.createElement('a')
   a.href = url
   a.download = name
@@ -24,8 +26,10 @@ const isTyping = (t: EventTarget | null) => t instanceof HTMLElement && (t.isCon
 
 export default function App() {
   const bank = useBank()
-  const { questions, categories, exams } = bank
-  const [view, setView] = useState<'bank' | 'exams'>('bank')
+  const { questions, categories, exams, reports } = bank
+  const [view, setView] = useState<'bank' | 'exams' | 'report'>('bank')
+  const [fPert, setFPert] = useState('')
+  const [fDir, setFDir] = useState('')
   const [sel, setSel] = useState<string | null>(null)
   const [editing, setEditing] = useState(false)
   const dirty = useRef(false)
@@ -90,6 +94,8 @@ export default function App() {
       if (fType && q.type !== fType) return false
       if (fStatus && (q.meta.status || 'aucun') !== fStatus) return false
       if (fIssues && !worst(issues.get(q.id) ?? [])) return false
+      if (fPert && (q.meta.review?.pertinence ?? '') !== fPert) return false
+      if (fDir && (q.meta.review?.direction ?? '') !== fDir) return false
       if (cat !== null) {
         const key = categoryKey(q.category)
         if (key !== cat && !key.startsWith(cat + SEP)) return false
@@ -97,7 +103,7 @@ export default function App() {
       const text = index.get(q.id) ?? ''
       return words.every((w) => text.includes(w))
     })
-  }, [questions, query, fType, fStatus, fIssues, cat, index, issues])
+  }, [questions, query, fType, fStatus, fIssues, fPert, fDir, cat, index, issues])
 
   const current = questions.find((q) => q.id === sel) ?? null
   const exam = exams.find((e) => e.id === examId) ?? null
@@ -118,11 +124,21 @@ export default function App() {
 
   const importFiles = async (files: File[]) => {
     const xml = files.filter((f) => f.name.toLowerCase().endsWith('.xml'))
-    if (!xml.length) return say('Aucun fichier .xml à importer.')
+    const json = files.filter((f) => f.name.toLowerCase().endsWith('.json'))
+    if (!xml.length && !json.length) return say('Aucun fichier .xml ou .json à importer.')
     setBusy(true)
     try {
-      const r = await bank.importXml(xml)
-      say(`${r.added} question${r.added > 1 ? 's' : ''} importée${r.added > 1 ? 's' : ''}` + (r.skipped ? `, ${r.skipped} déjà présente${r.skipped > 1 ? 's' : ''} ignorée${r.skipped > 1 ? 's' : ''}.` : '.'))
+      const msgs: string[] = []
+      if (xml.length) {
+        const r = await bank.importXml(xml)
+        msgs.push(`${r.added} question${r.added > 1 ? 's' : ''} importée${r.added > 1 ? 's' : ''}` + (r.skipped ? `, ${r.skipped} déjà présente${r.skipped > 1 ? 's' : ''} ignorée${r.skipped > 1 ? 's' : ''}` : ''))
+      }
+      // Le rapport passe après le XML pour retrouver ses questions.
+      for (const f of json) {
+        const r = await bank.importReport(f)
+        msgs.push(`rapport « ${f.name} » : ${r.matched} note${r.matched > 1 ? 's' : ''} rattachée${r.matched > 1 ? 's' : ''} sur ${r.total}`)
+      }
+      say(msgs.join(' · ') + '.')
     } catch (e) {
       alert('Import impossible : ' + (e instanceof Error ? e.message : String(e)))
     } finally {
@@ -148,6 +164,26 @@ export default function App() {
       window.print()
       setPrint(null)
     }, 400)
+  }
+
+  const createSuggestion = async (s: Suggestion) => {
+    const prefix = /^\$\w+\$/.exec(questions[0]?.category ?? '')?.[0] ?? '$course$'
+    const q = newQuestion('multichoice', `${prefix}/top/Questions suggérées/${(s.theme ?? 'Divers').replace(/\//g, '//')}`, bank.nextOrder())
+    const esc = (t: string) => t.replace(/&/g, '&amp;').replace(/</g, '&lt;')
+    setText(q, 'name', { text: `${s.theme ?? 'Suggestion'} – ${s.enonce.slice(0, 50)}`, files: [] })
+    setText(q, 'questiontext', emptyRt('html', `<p>${esc(s.enonce)}</p>`))
+    q.answers = s.options.map((o, i) => ({ k: uid(), fraction: i === s.bonne_reponse ? '100' : '0', rt: emptyRt('html', `<p>${esc(o)}</p>`), feedback: emptyRt('html'), extra: [] }))
+    q.meta.review = { pertinence: s.pertinence_visee ?? '', direction: '', theme: s.theme ?? '', probleme: '', correction: '', cle: '', doublons: [], edited: true }
+    setProp(q, 'single', 'true')
+    const saved = await bank.saveQuestion(q)
+    setCat(null)
+    setView('bank')
+    setSel(saved.id)
+    setEditing(true)
+  }
+  const exportNotes = (r: Report) => {
+    download(r.name.replace(/\.json$/i, '') + `-notes-${stamp()}.json`, exportReport(r, questions), 'application/json')
+    say('Notes exportées au format JSON.')
   }
 
   const create = async (type: string) => {
@@ -228,6 +264,11 @@ export default function App() {
             <button className={view === 'exams' ? 'on' : ''} onClick={() => leaveEdit() && setView('exams')}>
               Examens <span className="count">{exams.length}</span>
             </button>
+            {reports.length > 0 && (
+              <button className={view === 'report' ? 'on' : ''} onClick={() => leaveEdit() && setView('report')}>
+                Rapport
+              </button>
+            )}
           </nav>
           <span className="grow" />
           {view === 'bank' && (
@@ -244,9 +285,9 @@ export default function App() {
             </label>
           )}
           <button onClick={() => fileInput.current?.click()} disabled={busy}>
-            {busy ? 'Import en cours…' : 'Importer un XML'}
+            {busy ? 'Import en cours…' : 'Importer (XML, JSON)'}
           </button>
-          <input ref={fileInput} type="file" accept=".xml" multiple hidden onChange={(e) => importFiles([...(e.target.files ?? [])]).then(() => (e.target.value = ''))} />
+          <input ref={fileInput} type="file" accept=".xml,.json" multiple hidden onChange={(e) => importFiles([...(e.target.files ?? [])]).then(() => (e.target.value = ''))} />
           <details className="menu">
             <summary>Nouvelle question</summary>
             <div>
@@ -262,6 +303,11 @@ export default function App() {
             <div>
               <button onClick={() => exportXml(filtered, cat ? cat.split(SEP).pop()! : 'selection')}>Les {filtered.length} questions affichées</button>
               <button onClick={() => exportXml(questions, 'banque')}>Toute la banque ({questions.length})</button>
+              {reports.map((r) => (
+                <button key={r.name} onClick={() => exportNotes(r)}>
+                  Notes de révision (JSON)
+                </button>
+              ))}
               {exam && <button onClick={() => exportExam(exam)}>L’examen « {exam.name} »</button>}
               <hr />
               <button
@@ -281,11 +327,24 @@ export default function App() {
 
         {view === 'exams' ? (
           <ExamsView bank={bank} examId={examId} setExamId={setExamId} onExport={exportExam} onPrint={doPrint} />
+        ) : view === 'report' ? (
+          <ReportView
+            reports={reports}
+            questions={questions}
+            onCreate={createSuggestion}
+            onExport={exportNotes}
+            onShow={(d) => {
+              setFDir(d)
+              setFPert('')
+              setCat(null)
+              setView('bank')
+            }}
+          />
         ) : !questions.length ? (
           <div className="empty">
             <h1>Aucune question pour l’instant</h1>
             <p>
-              Dans StudiUM : <em>Banque de questions › Exporter › Format Moodle XML</em>, puis déposez le fichier ici.
+              Dans StudiUM : <em>Banque de questions › Exporter › Format Moodle XML</em>, puis déposez le fichier ici (avec son rapport JSON s’il y en a un).
             </p>
             <button className="primary" onClick={() => fileInput.current?.click()}>
               Importer un fichier Moodle XML
@@ -322,6 +381,24 @@ export default function App() {
                 <option value="a_reviser">À réviser</option>
                 <option value="validee">Validée</option>
               </select>
+              {questions.some((q) => q.meta.review) && (
+                <>
+                  <select value={fDir} onChange={(e) => setFDir(e.target.value)}>
+                    <option value="">Toutes les directions</option>
+                    {DIRECTIONS.map((d) => (
+                      <option key={d}>{d}</option>
+                    ))}
+                  </select>
+                  <select value={fPert} onChange={(e) => setFPert(e.target.value)}>
+                    <option value="">Toutes les pertinences</option>
+                    {PERTINENCES.map((d) => (
+                      <option key={d} value={d}>
+                        Pertinence {d.toLowerCase()}
+                      </option>
+                    ))}
+                  </select>
+                </>
+              )}
               <label className="check">
                 <input type="checkbox" checked={fIssues} onChange={(e) => setFIssues(e.target.checked)} />
                 Avec alertes seulement
@@ -352,6 +429,12 @@ export default function App() {
                         </div>
                         <div className="q-snippet">{plain(getText(q, 'questiontext')?.text).slice(0, 140)}</div>
                       </div>
+                      {q.meta.review?.pertinence && <span className="pert" title={'Pertinence ' + q.meta.review.pertinence.toLowerCase()}>{q.meta.review.pertinence[0]}</span>}
+                      {(q.meta.review?.direction === 'Améliorer' || q.meta.review?.direction === 'Corriger avant usage') && (
+                        <span className={'chip ' + directionClass(q.meta.review.direction)} title={q.meta.review.probleme}>
+                          {q.meta.review.direction === 'Améliorer' ? 'Améliorer' : 'À corriger'}
+                        </span>
+                      )}
                       {level && <span className={'flag ' + level} title={(issues.get(q.id) ?? []).map((i) => i.msg).join('\n')}>!</span>}
                       <button className={'add' + (inExam ? ' on' : '')} title={inExam ? 'Retirer de l’examen en cours' : 'Ajouter à l’examen en cours'} onClick={(e) => (e.stopPropagation(), toggleExam(q))}>
                         {inExam ? '✓' : '+'}
@@ -420,6 +503,7 @@ export default function App() {
                         .join(', ')}
                     </div>
                   )}
+                  <ReviewBox q={current} onChange={(review) => bank.updateMeta(current.id, { review })} />
                   <Issues issues={issues.get(current.id) ?? []} />
                   <div className="tabs">
                     <button className={tab === 'preview' ? 'on' : ''} onClick={() => setTab('preview')}>

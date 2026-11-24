@@ -4,18 +4,21 @@ import * as db from './db'
 import { clearFiles, loadIntoMemory, registerFiles } from './files'
 import { type Category, type Exam, type Question, getText, qName, setText, uid } from './model'
 import { parseMoodleXml, signature } from './moodleXml'
+import { type Report, applyReport, parseReport } from './report'
 
 export function useBank() {
   const [questions, setQuestions] = useState<Question[]>([])
   const [categories, setCategories] = useState<Category[]>([])
   const [exams, setExams] = useState<Exam[]>([])
+  const [reports, setReports] = useState<Report[]>([])
   const [loaded, setLoaded] = useState(false)
-  const ref = useRef({ questions, categories, exams })
-  ref.current = { questions, categories, exams }
+  const ref = useRef({ questions, categories, exams, reports })
+  ref.current = { questions, categories, exams, reports }
 
   useEffect(() => {
     ;(async () => {
-      const [qs, cs, fs, es] = await Promise.all([db.loadQuestions(), db.loadCategories(), db.loadFiles(), db.loadExams()])
+      const [qs, cs, fs, es, rs] = await Promise.all([db.loadQuestions(), db.loadCategories(), db.loadFiles(), db.loadExams(), db.loadReports()])
+      setReports(rs)
       loadIntoMemory(fs.map((f) => [f.hash, f.data]))
       setQuestions(qs.sort((a, b) => a.meta.order - b.meta.order))
       setCategories(cs)
@@ -47,11 +50,25 @@ export function useBank() {
       }
       for (const c of parsed.categories) if (!cats.some((x) => x.path === c.path)) cats.push(c)
     }
+    // Les rapports déjà importés s'appliquent aussi aux nouvelles questions.
+    for (const r of ref.current.reports) for (const q of applyReport(added, r.data)) added[added.findIndex((x) => x.id === q.id)] = q
     await db.putQuestions(added)
     await db.putCategories(cats)
     setQuestions([...ref.current.questions, ...added])
     setCategories(cats)
     return { added: added.length, skipped }
+  }, [])
+
+  /** Importe un rapport JSON et rattache ses notes aux questions (par l'étiquette id-origine-<ID>). */
+  const importReport = useCallback(async (file: File) => {
+    const report = parseReport(await file.text(), file.name)
+    await db.putReport(report)
+    setReports([...ref.current.reports.filter((r) => r.name !== report.name), report])
+    const changed = applyReport(ref.current.questions, report.data)
+    const byId = new Map(changed.map((q) => [q.id, q]))
+    await db.putQuestions(changed)
+    setQuestions(ref.current.questions.map((q) => byId.get(q.id) ?? q))
+    return { matched: changed.length, total: report.data.questions.length }
   }, [])
 
   /** Enregistre une question ; l'état précédent est archivé dans l'historique. */
@@ -120,9 +137,10 @@ export function useBank() {
     setQuestions([])
     setCategories([])
     setExams([])
+    setReports([])
   }, [])
 
-  return { questions, categories, exams, loaded, nextOrder, importXml, saveQuestion, updateMeta, duplicate, removeQuestion, saveExam, removeExam, clear }
+  return { questions, categories, exams, reports, loaded, nextOrder, importXml, importReport, saveQuestion, updateMeta, duplicate, removeQuestion, saveExam, removeExam, clear }
 }
 
 export type Bank = ReturnType<typeof useBank>
