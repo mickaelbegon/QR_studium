@@ -1,0 +1,191 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<quiz>
+<!-- question: 0  -->
+  <question type="category">
+    <category>
+      <text>$module$/top/Exemple/Biomécanique // cinématique</text>
+    </category>
+    <info format="html">
+      <text><![CDATA[<p>Catégorie d'exemple (données fictives)</p>]]></text>
+    </info>
+    <idnumber></idnumber>
+  </question>
+<!-- question: 1  -->
+  <question type="multichoice">
+    <name>
+      <text>Unité de force</text>
+    </name>
+    <questiontext format="html">
+      <text><![CDATA[<p>Quelle est l'unité de la force ? <img src="@@PLUGINFILE@@/point%20rouge.png" alt="point"></p>]]></text>
+<file name="point rouge.png" path="/" encoding="base64">iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==</file>
+    </questiontext>
+    <generalfeedback format="html">
+      <text><![CDATA[<p>Le newton (N) = kg·m/s² ; a &lt; b]]]]><![CDATA[> c</p>]]></text>
+    </generalfeedback>
+    <defaultgrade>1.0000000</defaultgrade>
+    <penalty>0.3333333</penalty>
+    <hidden>0</hidden>
+    <idnumber>EX-001</idnumber>
+    <single>true</single>
+    <shuffleanswers>true</shuffleanswers>
+    <answernumbering>abc</answernumbering>
+    <showstandardinstruction>0</showstandardinstruction>
+    <correctfeedback format="html">
+      <text>Votre réponse est correcte.</text>
+    </correctfeedback>
+    <partiallycorrectfeedback format="html">
+      <text>Votre réponse est partiellement correcte.</text>
+    </partiallycorrectfeedback>
+    <incorrectfeedback format="html">
+      <text>Votre réponse est incorrecte.</text>
+    </incorrectfeedback>
+    <shownumcorrect/>
+    <answer fraction="100" format="html">
+      <text><![CDATA[<p>Newton</p>]]></text>
+      <feedback format="html">
+        <text><![CDATA[<p>Oui.</p>]]></text>
+      </feedback>
+    </answer>
+    <answer fraction="0" format="html">
+      <text><![CDATA[<p>Joule</p>]]></text>
+      <feedback format="html">
+        <text></text>
+      </feedback>
+    </answer>
+    <tags>
+      <tag><text>unités</text></tag>
+      <tag><text>cours 1</text></tag>
+    </tags>
+  </question>
+  <question type="truefalse">
+    <name>
+      <text>Vitesse et accélération</text>
+    </name>
+    <questiontext format="html">
+      <text><![CDATA[<p>L'accélération est la dérivée de la vitesse.</p>]]></text>
+    </questiontext>
+    <generalfeedback format="html">
+      <text></text>
+    </generalfeedback>
+    <defaultgrade>1.0000000</defaultgrade>
+    <penalty>1.0000000</penalty>
+    <hidden>0</hidden>
+    <idnumber></idnumber>
+    <answer fraction="100" format="moodle_auto_format">
+      <text>true</text>
+      <feedback format="html">
+        <text></text>
+      </feedback>
+    </answer>
+    <answer fraction="0" format="moodle_auto_format">
+      <text>false</text>
+      <feedback format="html">
+        <text></text>
+      </feedback>
+    </answer>
+  </question>
+  <question type="matching">
+    <name>
+      <text>Grandeurs et unités</text>
+    </name>
+    <questiontext format="html">
+      <text><![CDATA[<p>Associez chaque grandeur à son unité.</p>]]></text>
+    </questiontext>
+    <generalfeedback format="html">
+      <text></text>
+    </generalfeedback>
+    <defaultgrade>3.0000000</defaultgrade>
+    <penalty>0.3333333</penalty>
+    <hidden>0</hidden>
+    <idnumber></idnumber>
+    <shuffleanswers>true</shuffleanswers>
+    <subquestion format="html">
+      <text><![CDATA[<p>Force</p>]]></text>
+      <answer>
+        <text>N</text>
+      </answer>
+    </subquestion>
+    <subquestion format="html">
+      <text><![CDATA[<p>Énergie</p>]]></text>
+      <answer>
+        <text>J</text>
+      </answer>
+    </subquestion>
+    <subquestion format="html">
+      <text><![CDATA[<p>Puissance</p>]]></text>
+      <answer>
+        <text>W</text>
+      </answer>
+    </subquestion>
+  </question>
+  <question type="category">
+    <category>
+      <text>$module$/top/Exemple/Autres</text>
+    </category>
+    <info format="moodle_auto_format">
+      <text></text>
+    </info>
+    <idnumber></idnumber>
+  </question>
+  <question type="cloze">
+    <name>
+      <text>Lois de Newton</text>
+    </name>
+    <questiontext format="html">
+      <text><![CDATA[<p>F = {1:MULTICHOICE:=m·a#Deuxième loi~m/a~%50%m·v} et g ≈ {2:NUMERICAL:=9.81:0.1} m/s². Le {1:SHORTANSWER:=moment~=couple} dépend du bras de levier.</p>]]></text>
+    </questiontext>
+    <generalfeedback format="html">
+      <text></text>
+    </generalfeedback>
+    <penalty>0.3333333</penalty>
+    <hidden>0</hidden>
+    <idnumber></idnumber>
+  </question>
+  <question type="description">
+    <name>
+      <text>Consignes</text>
+    </name>
+    <questiontext format="html">
+      <text><![CDATA[<p>Lisez attentivement les questions suivantes.</p>]]></text>
+    </questiontext>
+    <generalfeedback format="html">
+      <text></text>
+    </generalfeedback>
+    <defaultgrade>0.0000000</defaultgrade>
+    <penalty>0.0000000</penalty>
+    <hidden>0</hidden>
+    <idnumber></idnumber>
+  </question>
+  <question type="numerical">
+    <name>
+      <text>Poids</text>
+    </name>
+    <questiontext format="html">
+      <text><![CDATA[<p>Poids (N) d'une masse de 10 kg ?</p>]]></text>
+    </questiontext>
+    <generalfeedback format="html">
+      <text></text>
+    </generalfeedback>
+    <defaultgrade>1.0000000</defaultgrade>
+    <penalty>0.3333333</penalty>
+    <hidden>0</hidden>
+    <idnumber></idnumber>
+    <answer fraction="100" format="moodle_auto_format">
+      <text>98.1</text>
+      <feedback format="html">
+        <text></text>
+      </feedback>
+      <tolerance>0.5</tolerance>
+    </answer>
+    <units>
+      <unit>
+        <multiplier>1</multiplier>
+        <unit_name>N</unit_name>
+      </unit>
+    </units>
+    <unitgradingtype>0</unitgradingtype>
+    <hint format="html">
+      <text>Pensez à g.</text>
+    </hint>
+  </question>
+</quiz>
