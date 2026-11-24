@@ -27,6 +27,7 @@ const stamp = () => {
   return `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}`
 }
 const fileSafe = (s: string) => s.replace(/[^\p{L}\p{N}_-]+/gu, '_').slice(0, 60) || 'questions'
+const AUTO_KEY = 'qr.auto'
 const isTyping = (t: EventTarget | null) => t instanceof HTMLElement && (t.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(t.tagName))
 
 export default function App() {
@@ -150,6 +151,44 @@ export default function App() {
       setBusy(false)
     }
   }
+
+  // Au lancement : charge les fichiers .xml et .json posés dans data_prive/ (nouveaux ou modifiés).
+  const autoLoaded = useRef(false)
+  useEffect(() => {
+    if (!bank.loaded || autoLoaded.current) return
+    autoLoaded.current = true
+    ;(async () => {
+      try {
+        const list: { name: string; size: number; mtime: number }[] = await (await fetch('/api/data-prive')).json()
+        let seen: Record<string, string> = {}
+        try {
+          seen = JSON.parse(localStorage.getItem(AUTO_KEY) ?? '{}')
+        } catch {
+          /* aucun fichier mémorisé */
+        }
+        // Une banque vide recharge tout, même si les fichiers n'ont pas changé.
+        const todo = list.filter((f) => !questions.length || seen[f.name] !== `${f.size}-${f.mtime}`)
+        if (!todo.length) return
+        setBusy(true)
+        say(`Chargement de ${todo.map((f) => f.name).join(', ')}…`)
+        const files: File[] = []
+        for (const f of todo) {
+          const r = await fetch('/api/data-prive?name=' + encodeURIComponent(f.name))
+          if (r.ok) files.push(new File([await r.blob()], f.name))
+        }
+        await importFiles(files)
+        for (const f of todo) seen[f.name] = `${f.size}-${f.mtime}`
+        try {
+          localStorage.setItem(AUTO_KEY, JSON.stringify(seen))
+        } catch {
+          /* les fichiers seront simplement relus au prochain lancement */
+        }
+      } catch {
+        // Pas de dossier data_prive/ accessible (version compilée, par exemple) : import manuel.
+        setBusy(false)
+      }
+    })()
+  }, [bank.loaded])
 
   const exportXml = (qs: Question[], label: string) => {
     if (!qs.length) return say('Aucune question à exporter.')

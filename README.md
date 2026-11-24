@@ -56,6 +56,9 @@ d'ajouter au test toutes les questions de cette catégorie.
 Les banques de questions réelles vont dans `data_prive/`, ignoré par git, comme tout fichier
 `.xml` hors de `tests/fixtures/`. Ne jamais versionner de vraies questions d'examen.
 
+Au lancement, l'application charge d'elle-même les fichiers `.xml` et `.json` posés directement
+dans `data_prive/` (les nouveaux et ceux qui ont changé depuis le dernier chargement).
+
 Les données de l'application vivent dans le navigateur utilisé : changer de navigateur ou
 effacer ses données de site vide la banque locale. Exportez régulièrement toute la banque.
 
