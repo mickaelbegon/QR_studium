@@ -5,6 +5,7 @@ import { parseCloze } from '../src/cloze'
 import { findDuplicates, lintQuestion } from '../src/lint'
 import { categoryParts, comparable, getProp, getText, newQuestion, qName } from '../src/model'
 import { parseMoodleXml, serializeBank } from '../src/moodleXml'
+import { applyReport, exportReport, parseReport } from '../src/report'
 
 const fixture = readFileSync(join(__dirname, 'fixtures', 'exemple.xml'), 'utf8')
 
@@ -70,6 +71,60 @@ describe('Moodle XML', () => {
     ])
     expect(parts[1].weight).toBe(2)
     expect(parts[2].options[0].text).toBe('a}b')
+  })
+})
+
+describe('Rapport JSON', () => {
+  const data = {
+    meta: { cours: 'Exemple', repartition: { A: { Haute: 1, Moyenne: 1, Faible: 0 } } },
+    a_corriger_avant_usage: [{ id_moodle_origine: 2, probleme: 'Clé fausse', correction_proposee: 'Corriger', categorie_xml: 'c2' }],
+    cles_discutables: [{ id: 1, probleme: 'Deux réponses défendables' }],
+    questions: [
+      { id_moodle_origine: 1, theme: 'A', pertinence: 'Haute', statut: 'Garder', probleme: null, correction_proposee: null, categorie_xml: 'c1', doublons_retires: [9] },
+      { id_moodle_origine: 2, theme: 'A', pertinence: 'Moyenne', statut: 'Corriger avant usage', probleme: 'Clé fausse', correction_proposee: 'Corriger', categorie_xml: 'c2', doublons_retires: [] },
+    ],
+  }
+  const bank = () => {
+    const qs = [newQuestion('multichoice', '', 1), newQuestion('truefalse', '', 2), newQuestion('cloze', '', 3)]
+    // Comme des questions venant d'un import XML : sans statut.
+    qs.forEach((q) => (q.meta.status = ''))
+    qs[0].tags = ['id-origine-1']
+    qs[1].tags = ['pertinence-moyenne', 'id-origine-2']
+    return qs
+  }
+
+  it('rattache les notes par l’étiquette id-origine', () => {
+    const report = parseReport(JSON.stringify(data), 'r.json')
+    const changed = applyReport(bank(), report.data)
+    expect(changed.map((q) => q.meta.review?.origine)).toEqual([1, 2])
+    expect(changed[0].meta.review).toMatchObject({ pertinence: 'Haute', direction: 'Garder', cle: 'Deux réponses défendables', doublons: [9] })
+    expect(changed[1].meta.review).toMatchObject({ probleme: 'Clé fausse', correction: 'Corriger' })
+    expect(() => parseReport('{"x":1}', 'r.json')).toThrow()
+  })
+
+  it('exporte les notes à jour et se relit', () => {
+    const report = parseReport(JSON.stringify(data), 'r.json')
+    const qs = bank()
+    for (const q of applyReport(qs, report.data)) qs[qs.findIndex((x) => x.id === q.id)] = q
+    // Sans modification, l'export redonne le rapport d'origine.
+    const same = JSON.parse(exportReport(report, qs))
+    expect(same.questions.map(({ etat_application: _e, note_privee: _n, ...e }: Record<string, unknown>) => e)).toEqual(data.questions)
+    expect(same.a_corriger_avant_usage).toEqual(data.a_corriger_avant_usage)
+    expect(same.meta).toEqual(data.meta)
+    expect(same.cles_discutables).toEqual(data.cles_discutables)
+
+    qs[1].meta.review = { ...qs[1].meta.review!, direction: 'Garder', pertinence: 'Haute', probleme: '', edited: true }
+    qs[1].meta.note = 'revue en novembre'
+    qs[1].meta.status = 'validee'
+    const out = JSON.parse(exportReport(report, qs))
+    expect(out.questions[1]).toMatchObject({ statut: 'Garder', pertinence: 'Haute', probleme: null, note_privee: 'revue en novembre', etat_application: 'validee' })
+    expect(out.a_corriger_avant_usage).toEqual([])
+    expect(out.meta.repartition).toEqual({ A: { Haute: 2, Moyenne: 0, Faible: 0 } })
+
+    // Relu dans une banque vierge, l'export restitue notes, statut et note privée.
+    const fresh = applyReport(bank(), parseReport(JSON.stringify(out), 'r2.json').data)
+    expect(fresh[1].meta).toMatchObject({ status: 'validee', note: 'revue en novembre' })
+    expect(fresh[1].meta.review).toMatchObject({ direction: 'Garder', pertinence: 'Haute' })
   })
 })
 

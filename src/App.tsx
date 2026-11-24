@@ -20,7 +20,12 @@ function download(name: string, xml: string, type = 'application/xml') {
   setTimeout(() => URL.revokeObjectURL(url), 1000)
 }
 
-const stamp = () => new Date().toISOString().slice(0, 16).replace(/[-:T]/g, '')
+/** Horodatage en heure locale pour les noms de fichiers exportés. */
+const stamp = () => {
+  const d = new Date()
+  const p = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}`
+}
 const fileSafe = (s: string) => s.replace(/[^\p{L}\p{N}_-]+/gu, '_').slice(0, 60) || 'questions'
 const isTyping = (t: EventTarget | null) => t instanceof HTMLElement && (t.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(t.tagName))
 
@@ -170,7 +175,8 @@ export default function App() {
     const prefix = /^\$\w+\$/.exec(questions[0]?.category ?? '')?.[0] ?? '$course$'
     const q = newQuestion('multichoice', `${prefix}/top/Questions suggérées/${(s.theme ?? 'Divers').replace(/\//g, '//')}`, bank.nextOrder())
     const esc = (t: string) => t.replace(/&/g, '&amp;').replace(/</g, '&lt;')
-    setText(q, 'name', { text: `${s.theme ?? 'Suggestion'} – ${s.enonce.slice(0, 50)}`, files: [] })
+    const short = s.enonce.length > 60 ? s.enonce.slice(0, 60).replace(/\s+\S*$/, '') + '…' : s.enonce
+    setText(q, 'name', { text: `${s.theme ?? 'Suggestion'} – ${short}`, files: [] })
     setText(q, 'questiontext', emptyRt('html', `<p>${esc(s.enonce)}</p>`))
     q.answers = s.options.map((o, i) => ({ k: uid(), fraction: i === s.bonne_reponse ? '100' : '0', rt: emptyRt('html', `<p>${esc(o)}</p>`), feedback: emptyRt('html'), extra: [] }))
     q.meta.review = { pertinence: s.pertinence_visee ?? '', direction: '', theme: s.theme ?? '', probleme: '', correction: '', cle: '', doublons: [], edited: true }
@@ -181,6 +187,9 @@ export default function App() {
     setSel(saved.id)
     setEditing(true)
   }
+  /** Question de la banque dont l'énoncé est celui de la suggestion (déjà créée). */
+  const byStatement = useMemo(() => new Map(questions.map((q) => [fold(plain(getText(q, 'questiontext')?.text)), q.id])), [questions])
+  const existing = (s: Suggestion) => byStatement.get(fold(plain(s.enonce))) ?? null
   const exportNotes = (r: Report) => {
     download(r.name.replace(/\.json$/i, '') + `-notes-${stamp()}.json`, exportReport(r, questions), 'application/json')
     say('Notes exportées au format JSON.')
@@ -332,6 +341,18 @@ export default function App() {
             reports={reports}
             questions={questions}
             onCreate={createSuggestion}
+            existing={existing}
+            onOpen={(id) => {
+              setFDir('')
+              setFPert('')
+              setFType('')
+              setFStatus('')
+              setFIssues(false)
+              setQuery('')
+              setCat(null)
+              setView('bank')
+              setSel(id)
+            }}
             onExport={exportNotes}
             onShow={(d) => {
               setFDir(d)

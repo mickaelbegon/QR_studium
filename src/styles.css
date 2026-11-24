@@ -240,3 +240,4 @@ details > summary { cursor: pointer; color: var(--muted); }
 .suggestion p { margin: 8px 0; font-weight: 600; }
 .suggestion ul { margin: 0; padding-left: 18px; }
 .suggestion li.ok { color: var(--ok); font-weight: 600; }
+.suggestion button.done { background: var(--ok-soft); border-color: #9fd4b0; color: var(--ok); }

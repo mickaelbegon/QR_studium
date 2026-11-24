@@ -57,7 +57,7 @@ export function ReviewBox({ q, onChange }: { q: Question; onChange: (r: Review) 
 }
 
 /** Vue d'ensemble du rapport : répartition, défauts récurrents, lacunes, questions suggérées. */
-export function ReportView({ reports, questions, onCreate, onExport, onShow }: { reports: Report[]; questions: Question[]; onCreate: (s: Suggestion) => void; onExport: (r: Report) => void; onShow: (direction: string) => void }) {
+export function ReportView({ reports, questions, onCreate, existing, onOpen, onExport, onShow }: { reports: Report[]; questions: Question[]; onCreate: (s: Suggestion) => void; existing: (s: Suggestion) => string | null; onOpen: (id: string) => void; onExport: (r: Report) => void; onShow: (direction: string) => void }) {
   if (!reports.length)
     return (
       <div className="empty">
@@ -189,7 +189,13 @@ export function ReportView({ reports, questions, onCreate, onExport, onShow }: {
                           {s.theme}
                           {s.pertinence_visee ? ` · pertinence visée : ${s.pertinence_visee}` : ''}
                         </span>
-                        <button onClick={() => onCreate(s)}>Créer cette question</button>
+                        {existing(s) ? (
+                          <button className="done" onClick={() => onOpen(existing(s)!)} title="Une question de la banque a déjà cet énoncé">
+                            ✓ Déjà créée · ouvrir
+                          </button>
+                        ) : (
+                          <button onClick={() => onCreate(s)}>Créer cette question</button>
+                        )}
                       </div>
                       <p>{s.enonce}</p>
                       <ul>

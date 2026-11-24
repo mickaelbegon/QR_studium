@@ -11,6 +11,9 @@ export interface ReportEntry {
   probleme?: string | null
   correction_proposee?: string | null
   doublons_retires?: number[]
+  categorie_xml?: string | null
+  etat_application?: string | null
+  note_privee?: string | null
   [k: string]: unknown
 }
 
@@ -78,12 +81,19 @@ export function reviewIndex(data: ReportData): Map<number, Review> {
 /** Rattache les notes du rapport aux questions ; ne remplace jamais une note modifiée dans l'application. */
 export function applyReport(questions: Question[], data: ReportData): Question[] {
   const index = reviewIndex(data)
+  const entries = new Map(data.questions.map((e) => [e.id_moodle_origine, e]))
+  const states = ['brouillon', 'a_reviser', 'validee']
   const changed: Question[] = []
   for (const q of questions) {
     const id = originId(q)
     const review = id === null ? undefined : index.get(id)
     if (!review || q.meta.review?.edited) continue
-    changed.push({ ...q, meta: { ...q.meta, review } })
+    // Un rapport exporté par l'application contient aussi le statut et la note privée :
+    // on les reprend seulement s'ils sont vides ici.
+    const e = entries.get(id!)
+    const status = !q.meta.status && e?.etat_application && states.includes(e.etat_application) ? (e.etat_application as Question['meta']['status']) : q.meta.status
+    const note = !q.meta.note && typeof e?.note_privee === 'string' ? e.note_privee : q.meta.note
+    changed.push({ ...q, meta: { ...q.meta, status, note, review } })
   }
   return changed
 }
@@ -109,6 +119,23 @@ export function exportReport(report: Report, questions: Question[]): string {
       note_privee: q.meta.note || null,
     }
   })
+  // Les listes dérivées suivent les notes actuelles, sinon elles contrediraient « questions ».
+  const aCorriger = entries
+    .filter((e) => e.statut === 'Corriger avant usage')
+    .map((e) => ({ id_moodle_origine: e.id_moodle_origine, probleme: e.probleme ?? null, correction_proposee: e.correction_proposee ?? null, categorie_xml: e.categorie_xml ?? null }))
+  const meta = { ...(report.data.meta ?? {}) } as Record<string, unknown>
+  if (meta.repartition && typeof meta.repartition === 'object') {
+    const rep: Record<string, Record<string, number>> = {}
+    for (const theme of Object.keys(meta.repartition as object)) rep[theme] = { Haute: 0, Moyenne: 0, Faible: 0 }
+    for (const e of entries) {
+      if (!e.theme || !e.pertinence) continue
+      rep[e.theme] ??= { Haute: 0, Moyenne: 0, Faible: 0 }
+      rep[e.theme][e.pertinence] = (rep[e.theme][e.pertinence] ?? 0) + 1
+    }
+    meta.repartition = rep
+  }
   const cles = questions.filter((q) => q.meta.review?.cle && q.meta.review.origine != null).map((q) => ({ id: q.meta.review!.origine!, probleme: q.meta.review!.cle }))
-  return JSON.stringify({ ...report.data, cles_discutables: cles, questions: entries }, null, 2)
+  const out: Record<string, unknown> = { ...report.data, meta, cles_discutables: cles, questions: entries }
+  if ('a_corriger_avant_usage' in report.data) out.a_corriger_avant_usage = aCorriger
+  return JSON.stringify(out, null, 2)
 }
