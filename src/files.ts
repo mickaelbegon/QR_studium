@@ -1,6 +1,6 @@
 // Magasin des fichiers intégrés (images en base64), dédupliqués par contenu.
 import DOMPurify from 'dompurify'
-import { renderCloze } from './cloze'
+import { renderCloze, renderClozeInputs } from './cloze'
 import * as db from './db'
 import { type FileRef, type RichText, pluginUrl, replaceFileRefs } from './model'
 import { contentKey } from './moodleXml'
@@ -52,10 +52,10 @@ export function fileUrl(f: FileRef): string {
 const escapeHtml = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 
 /** HTML affichable d'un texte de question : nettoyé (pas de script) et images résolues. */
-export function renderRt(rt: RichText | undefined, o: { cloze?: boolean; showAnswers?: boolean } = {}): string {
+export function renderRt(rt: RichText | undefined, o: { cloze?: boolean; showAnswers?: boolean; interactive?: boolean } = {}): string {
   if (!rt || !rt.text) return ''
   let html = rt.format === 'plain_text' ? escapeHtml(rt.text).replace(/\n/g, '<br>') : rt.text
-  if (o.cloze) html = renderCloze(html, o.showAnswers ?? true)
+  if (o.cloze) html = o.interactive ? renderClozeInputs(html) : renderCloze(html, o.showAnswers ?? true)
   html = DOMPurify.sanitize(html)
   return replaceFileRefs(html, rt, fileUrl)
 }

@@ -76,3 +76,43 @@ export function renderCloze(html: string, showAnswers: boolean): string {
     return `<span class="cloze"><span class="cloze-kind">${KIND_LABEL[kind]}</span>${opts}</span>`
   })
 }
+
+function shuffled<T>(a: T[]): T[] {
+  const b = [...a]
+  for (let i = b.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1))
+    ;[b[i], b[j]] = [b[j], b[i]]
+  }
+  return b
+}
+
+const noTags = (s: string) => s.replace(/<[^>]*>/g, '')
+
+/**
+ * Remplace chaque trou par le champ que voit l'étudiant : zone de texte, menu déroulant,
+ * boutons radio ou cases à cocher (verticaux ou horizontaux selon le code du trou).
+ * Chaque champ porte data-cz="<rang du trou>", dans le même ordre que parseCloze.
+ */
+export function renderClozeInputs(html: string): string {
+  let i = -1
+  return html.replace(RE, (raw, _w, code: string, body: string) => {
+    const kind = kindOf(code)
+    if (!kind) return raw
+    i++
+    const options = parseOptions(body)
+    if (kind === 'sa' || kind === 'nm') {
+      const size = Math.max(5, Math.min(30, ...options.map((o) => noTags(o.text).length + 2)))
+      return `<input type="text" class="cz" data-cz="${i}" size="${size}" autocomplete="off">`
+    }
+    const vertical = /(_V|^MCV|^MR$|^MRS$|^MULTIRESPONSE$|^MULTIRESPONSE_S$)/.test(code)
+    const horizontal = /(_H|^MCH|^MRH)/.test(code)
+    let order = options.map((o, k) => ({ o, k }))
+    if (/S$/.test(code) && code !== 'MULTIRESPONSE') order = shuffled(order)
+    if (kind === 'mc' && !vertical && !horizontal) {
+      return `<select class="cz" data-cz="${i}"><option value=""></option>${order.map(({ o, k }) => `<option value="${k}">${noTags(o.text)}</option>`).join('')}</select>`
+    }
+    const type = kind === 'mr' ? 'checkbox' : 'radio'
+    const items = order.map(({ o, k }) => `<label><input type="${type}" name="cz${i}" value="${k}"> ${o.text}</label>`).join('')
+    return `<span class="cz-group ${horizontal ? 'h' : 'v'}" data-cz="${i}">${items}</span>`
+  })
+}

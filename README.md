@@ -40,6 +40,8 @@ d'ajouter au test toutes les questions de cette catégorie.
   interprétés (unités, indices, types de questions rares) sont conservés tels quels.
 - Aperçu avec corrigé : choix multiple, vrai/faux, appariement, cloze, réponse courte,
   numérique, description.
+- Vue étudiant : la question telle qu'elle se présente dans un test StudiUM, avec réponses à
+  choisir, bouton « Vérifier », note et rétroactions (présentation approchée du thème Moodle).
 - Recherche plein texte, filtres par catégorie, type, statut et alertes.
 - Sélection par cases à cocher (Maj+clic pour une plage) et suppression en lot, annulable.
 - Éditeur par type de question avec aperçu en direct ; création et duplication en variante.

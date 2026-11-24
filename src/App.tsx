@@ -10,6 +10,7 @@ import { Issues, QuestionPreview } from './Preview'
 import { type Report, type Suggestion, backupNotes, correctedCategory, exportReport, sameTags, syncTags } from './report'
 import { DIRECTIONS, PERTINENCES, ReportView, ReviewBox, directionClass } from './ReviewPanel'
 import { useBank } from './store'
+import { StudentView } from './Student'
 
 function download(name: string, xml: string, type = 'application/xml') {
   const url = URL.createObjectURL(new Blob([xml], { type }))
@@ -41,7 +42,7 @@ export default function App() {
   const [sel, setSel] = useState<string | null>(null)
   const [editing, setEditing] = useState(false)
   const dirty = useRef(false)
-  const [tab, setTab] = useState<'preview' | 'history'>('preview')
+  const [tab, setTab] = useState<'preview' | 'student' | 'history'>('preview')
   const [query, setQuery] = useState('')
   const [fType, setFType] = useState('')
   const [fStatus, setFStatus] = useState('')
@@ -137,7 +138,7 @@ export default function App() {
   const select = (id: string) => {
     if (id === sel || !leaveEdit()) return
     setSel(id)
-    setTab('preview')
+    if (tab === 'history') setTab('preview')
   }
 
   const importFiles = async (files: File[]) => {
@@ -766,11 +767,14 @@ export default function App() {
                     <button className={tab === 'preview' ? 'on' : ''} onClick={() => setTab('preview')}>
                       Aperçu avec corrigé
                     </button>
+                    <button className={tab === 'student' ? 'on' : ''} onClick={() => setTab('student')} title="La question telle que l’étudiant la voit et y répond dans StudiUM">
+                      Vue étudiant
+                    </button>
                     <button className={tab === 'history' ? 'on' : ''} onClick={() => setTab('history')}>
                       Historique
                     </button>
                   </div>
-                  {tab === 'preview' ? <QuestionPreview q={current} /> : <History q={current} onRestore={(snap) => bank.saveQuestion({ ...snap, meta: { ...current.meta } }, 'Restauration d’une version antérieure')} />}
+                  {tab === 'preview' ? <QuestionPreview q={current} /> : tab === 'student' ? <StudentView key={current.id + ':' + current.meta.modified} q={current} /> : <History q={current} onRestore={(snap) => bank.saveQuestion({ ...snap, meta: { ...current.meta } }, 'Restauration d’une version antérieure')} />}
                 </div>
               )}
             </section>
