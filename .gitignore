@@ -1,0 +1,12 @@
+# Banques de questions réelles : ne jamais versionner ni partager
+data_prive/
+*.xml
+!tests/fixtures/*.xml
+*.mbz
+
+# Environnements / build
+node_modules/
+dist/
+.venv/
+__pycache__/
+.env
