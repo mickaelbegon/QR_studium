@@ -59,6 +59,12 @@ Les banques de questions réelles vont dans `data_prive/`, ignoré par git, comm
 Au lancement, l'application charge d'elle-même les fichiers `.xml` et `.json` posés directement
 dans `data_prive/` (les nouveaux et ceux qui ont changé depuis le dernier chargement).
 
+Quelques secondes après chaque modification, l'application écrit une sauvegarde dans
+`data_prive/sauvegardes/` : `banque-AAAA-MM-JJ.xml` (toute la banque, réimportable dans
+l'application ou dans StudiUM) et `notes-AAAA-MM-JJ.json` (notes de révision, statuts, notes
+privées, composition des examens). Il y a une sauvegarde par jour, réécrite au fil de la journée ;
+les trois derniers jours sont conservés. L'historique des versions n'est pas sauvegardé.
+
 Les données de l'application vivent dans le navigateur utilisé : changer de navigateur ou
 effacer ses données de site vide la banque locale. Exportez régulièrement toute la banque.
 

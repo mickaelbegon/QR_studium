@@ -139,3 +139,53 @@ export function exportReport(report: Report, questions: Question[]): string {
   if ('a_corriger_avant_usage' in report.data) out.a_corriger_avant_usage = aCorriger
   return JSON.stringify(out, null, 2)
 }
+
+// ---- Étiquettes et catégories qui suivent la note de révision ----
+
+const slug = (s: string) => s.trim().toLowerCase().replace(/\s+/g, '-')
+
+/**
+ * Met à jour les étiquettes « statut-… » et « pertinence-… » d'une question pour qu'elles
+ * suivent sa note (seulement si la question utilisait déjà cette convention).
+ */
+export function syncTags(tags: string[], r: Review | undefined): string[] {
+  const hadStatut = tags.some((t) => /^statut-/.test(t))
+  const hadPertinence = tags.some((t) => /^pertinence-/.test(t))
+  const out = tags.filter((t) => !/^(statut|pertinence)-/.test(t))
+  if (hadPertinence && r?.pertinence) out.push('pertinence-' + slug(r.pertinence))
+  if (hadStatut && r?.direction) out.push('statut-' + slug(r.direction))
+  return out
+}
+
+export const sameTags = (a: string[], b: string[]): boolean => a.length === b.length && a.every((t) => b.includes(t))
+
+/**
+ * Catégorie où ranger une question une fois corrigée : si elle est dans « … / 0 – À corriger
+ * avant usage », la catégorie voisine correspondant à sa pertinence (« … / 1 – Pertinence haute »).
+ */
+export function correctedCategory(category: string, pertinence: string, categories: string[]): string | null {
+  const cut = category.lastIndexOf('/')
+  if (cut < 0 || !pertinence || !/corriger/i.test(category.slice(cut + 1))) return null
+  const parent = category.slice(0, cut)
+  const wanted = 'pertinence ' + pertinence.toLowerCase()
+  const last = (c: string) => c.slice(c.lastIndexOf('/') + 1)
+  const sibling = categories.find((c) => c.slice(0, c.lastIndexOf('/')) === parent && last(c).toLowerCase().includes(wanted))
+  if (sibling) return sibling
+  // Pas encore de catégorie voisine dans ce cours : on reprend le libellé utilisé ailleurs.
+  const model = categories.find((c) => last(c).toLowerCase().includes(wanted))
+  return model ? parent + '/' + last(model) : null
+}
+
+/** Contenu du fichier de notes d'une sauvegarde : rapport à jour, examens, et notes hors rapport. */
+export function backupNotes(report: Report | undefined, questions: Question[], exams: { name: string; items: string[] }[], name: (q: Question) => string): string {
+  const base: Record<string, unknown> = report ? JSON.parse(exportReport(report, questions)) : { questions: [] }
+  const byId = new Map(questions.map((q) => [q.id, q]))
+  base.examens = exams.map((e) => ({
+    nom: e.name,
+    questions: e.items.map((id) => byId.get(id)).filter((q): q is Question => !!q).map((q) => ({ nom: name(q), id_origine: q.meta.review?.origine ?? originId(q) })),
+  }))
+  base.autres_questions = questions
+    .filter((q) => (q.meta.review?.origine ?? originId(q)) == null && (q.meta.status || q.meta.note || (q.meta.review && !q.meta.review.removed)))
+    .map((q) => ({ nom: name(q), etat_application: q.meta.status || null, note_privee: q.meta.note || null, note_de_revision: q.meta.review ?? null }))
+  return JSON.stringify(base, null, 2)
+}

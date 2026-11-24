@@ -4,10 +4,10 @@ import { QuestionEditor } from './Editor'
 import { ExamsView, PrintSheet, points } from './Exams'
 import { fileData } from './files'
 import { type Issue, findDuplicates, lintQuestion, worst } from './lint'
-import { CREATABLE, type Exam, type Question, SEP, emptyRt, setProp, setText, uid, STATUS, type Status, type Version, categoryKey, categoryLabel, categoryParts, fold, getProp, getText, newQuestion, plain, qName, searchText, typeLabel, typeShort } from './model'
+import { CREATABLE, type Exam, type Question, type Review, SEP, emptyReview, emptyRt, setProp, setText, uid, STATUS, type Status, type Version, categoryKey, categoryLabel, categoryParts, fold, getProp, getText, newQuestion, plain, qName, searchText, typeLabel, typeShort } from './model'
 import { serializeBank } from './moodleXml'
 import { Issues, QuestionPreview } from './Preview'
-import { type Report, type Suggestion, exportReport } from './report'
+import { type Report, type Suggestion, backupNotes, correctedCategory, exportReport, sameTags, syncTags } from './report'
 import { DIRECTIONS, PERTINENCES, ReportView, ReviewBox, directionClass } from './ReviewPanel'
 import { useBank } from './store'
 
@@ -190,6 +190,59 @@ export default function App() {
     })()
   }, [bank.loaded])
 
+  // ---- Sauvegarde automatique dans data_prive/sauvegardes/ (quelques secondes après chaque changement) ----
+  const [backup, setBackup] = useState('')
+  const saved = useRef<{ q: Question[] | null; e: Exam[] }>({ q: null, e: [] })
+  useEffect(() => {
+    if (!bank.loaded) return
+    if (saved.current.q === null) {
+      saved.current = { q: questions, e: exams }
+      return
+    }
+    // Une banque vide n'écrase jamais une sauvegarde existante.
+    if (!questions.length || (saved.current.q === questions && saved.current.e === exams)) return
+    setBackup('pending')
+    const timer = setTimeout(async () => {
+      setBackup('saving')
+      const now = new Date()
+      const p = (n: number) => String(n).padStart(2, '0')
+      const day = `${now.getFullYear()}-${p(now.getMonth() + 1)}-${p(now.getDate())}`
+      const post = async (name: string, body: string) => {
+        const r = await fetch('/api/sauvegarde?name=' + name, { method: 'POST', body: new Blob([body]) })
+        if (!r.ok) throw new Error(String(r.status))
+      }
+      try {
+        if (saved.current.q !== questions) await post(`banque-${day}.xml`, serializeBank(questions, categories, fileData))
+        await post(`notes-${day}.json`, backupNotes(reports[0], questions, exams, qName))
+        saved.current = { q: questions, e: exams }
+        setBackup(`${p(now.getHours())}:${p(now.getMinutes())}`)
+      } catch {
+        setBackup('error')
+      }
+    }, 6000)
+    return () => clearTimeout(timer)
+  }, [bank.loaded, questions, exams])
+
+  // ---- Notes de révision : les étiquettes et la catégorie suivent la note ----
+  const changeReview = async (q: Question, review: Review, o: { category?: string | null; note?: string } = {}) => {
+    const tags = syncTags(q.tags, review)
+    const category = o.category ?? q.category
+    if (sameTags(tags, q.tags) && category === q.category) return bank.updateMeta(q.id, { review })
+    await bank.saveQuestion({ ...q, tags, category, meta: { ...q.meta, review } }, o.note ?? 'Note de révision mise à jour')
+  }
+  const markCorrected = async (q: Question) => {
+    const r = q.meta.review
+    if (!r) return
+    const category = correctedCategory(q.category, r.pertinence, categories.map((c) => c.path))
+    await changeReview(q, { ...r, direction: 'Garder', probleme: '', correction: '', cle: '', edited: true }, { category, note: 'Question corrigée' })
+    say('Marquée comme corrigée' + (category ? ` et déplacée vers « ${categoryLabel(category)} ».` : '. Sa catégorie n’a pas changé.'))
+  }
+  const removeReview = async (q: Question) => {
+    const r = q.meta.review
+    if (!r || !confirm('Supprimer la note de révision de cette question ?')) return
+    await changeReview(q, { ...emptyReview(), origine: r.origine, theme: r.theme, doublons: r.doublons, edited: true, removed: true }, { note: 'Note de révision supprimée' })
+  }
+
   const exportXml = (qs: Question[], label: string) => {
     if (!qs.length) return say('Aucune question à exporter.')
     download(`questions-${fileSafe(label)}-${stamp()}.xml`, serializeBank(qs, categories, fileData))
@@ -332,6 +385,16 @@ export default function App() {
               </select>
             </label>
           )}
+          {backup && backup !== 'error' && (
+            <span className="backup" title="Sauvegarde automatique dans data_prive/sauvegardes">
+              {backup === 'pending' ? 'Modifications à sauvegarder…' : backup === 'saving' ? 'Sauvegarde…' : `Sauvegardé à ${backup}`}
+            </span>
+          )}
+          {backup === 'error' && (
+            <span className="backup bad" title="Le dossier data_prive/sauvegardes n’a pas pu être écrit. Lancez l’application avec lancer.bat et exportez la banque à la main en attendant.">
+              Sauvegarde impossible
+            </span>
+          )}
           <button onClick={() => fileInput.current?.click()} disabled={busy}>
             {busy ? 'Import en cours…' : 'Importer (XML, JSON)'}
           </button>
@@ -441,7 +504,7 @@ export default function App() {
                 <option value="a_reviser">À réviser</option>
                 <option value="validee">Validée</option>
               </select>
-              {questions.some((q) => q.meta.review) && (
+              {questions.some((q) => q.meta.review && !q.meta.review.removed) && (
                 <>
                   <select value={fDir} onChange={(e) => setFDir(e.target.value)}>
                     <option value="">Toutes les directions</option>
@@ -519,6 +582,26 @@ export default function App() {
                     </button>
                     <button onClick={async () => { const c = await bank.duplicate(current.id); if (c) { setSel(c.id); setEditing(true) } }}>Dupliquer en variante</button>
                     <button onClick={() => toggleExam(current)}>{exam?.items.includes(current.id) ? 'Retirer de l’examen' : 'Ajouter à l’examen'}</button>
+                    <select
+                      className="move"
+                      value=""
+                      title="Changer la question de catégorie"
+                      onChange={async (e) => {
+                        const category = e.target.value
+                        if (!category || category === current.category) return
+                        await bank.saveQuestion({ ...current, category }, 'Changement de catégorie')
+                        say(`Déplacée vers « ${categoryLabel(category)} ».`)
+                      }}
+                    >
+                      <option value="">Déplacer vers…</option>
+                      {[...categories]
+                        .sort((a, b) => a.path.localeCompare(b.path, 'fr'))
+                        .map((c) => (
+                          <option key={c.path} value={c.path} disabled={c.path === current.category}>
+                            {categoryLabel(c.path)}
+                          </option>
+                        ))}
+                    </select>
                     <span className="grow" />
                     <button
                       className="danger"
@@ -563,7 +646,7 @@ export default function App() {
                         .join(', ')}
                     </div>
                   )}
-                  <ReviewBox q={current} onChange={(review) => bank.updateMeta(current.id, { review })} />
+                  <ReviewBox q={current} onChange={(review) => changeReview(current, review)} onCorrected={() => markCorrected(current)} onRemove={() => removeReview(current)} />
                   <Issues issues={issues.get(current.id) ?? []} />
                   <div className="tabs">
                     <button className={tab === 'preview' ? 'on' : ''} onClick={() => setTab('preview')}>

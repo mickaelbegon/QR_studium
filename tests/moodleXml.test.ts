@@ -5,7 +5,7 @@ import { parseCloze } from '../src/cloze'
 import { findDuplicates, lintQuestion } from '../src/lint'
 import { categoryParts, comparable, getProp, getText, newQuestion, qName } from '../src/model'
 import { parseMoodleXml, serializeBank } from '../src/moodleXml'
-import { applyReport, exportReport, parseReport } from '../src/report'
+import { applyReport, backupNotes, correctedCategory, exportReport, parseReport, syncTags } from '../src/report'
 
 const fixture = readFileSync(join(__dirname, 'fixtures', 'exemple.xml'), 'utf8')
 
@@ -125,6 +125,35 @@ describe('Rapport JSON', () => {
     const fresh = applyReport(bank(), parseReport(JSON.stringify(out), 'r2.json').data)
     expect(fresh[1].meta).toMatchObject({ status: 'validee', note: 'revue en novembre' })
     expect(fresh[1].meta.review).toMatchObject({ direction: 'Garder', pertinence: 'Haute' })
+  })
+})
+
+describe('Question corrigée', () => {
+  const cats = ['$course$/top/B/Cours 01/0 – À corriger avant usage', '$course$/top/B/Cours 01/1 – Pertinence haute', '$course$/top/B/Cours 02/0 – À corriger avant usage', '$course$/top/B/Cours 02/2 – Pertinence moyenne']
+
+  it('trouve la catégorie de rangement selon la pertinence', () => {
+    expect(correctedCategory(cats[0], 'Haute', cats)).toBe(cats[1])
+    // Catégorie voisine absente : le libellé est repris d'un autre cours.
+    expect(correctedCategory(cats[2], 'Haute', cats)).toBe('$course$/top/B/Cours 02/1 – Pertinence haute')
+    expect(correctedCategory(cats[1], 'Haute', cats)).toBeNull()
+    expect(correctedCategory(cats[0], '', cats)).toBeNull()
+  })
+
+  it('fait suivre les étiquettes de statut et de pertinence', () => {
+    const tags = ['id-origine-5', 'pertinence-moyenne', 'statut-corriger-avant-usage']
+    const r = { pertinence: 'Haute', direction: 'Garder', theme: '', probleme: '', correction: '', cle: '', doublons: [] }
+    expect(syncTags(tags, r)).toEqual(['id-origine-5', 'pertinence-haute', 'statut-garder'])
+    expect(syncTags(tags, { ...r, pertinence: '', direction: '' })).toEqual(['id-origine-5'])
+    // Une question sans ces étiquettes n'en reçoit pas.
+    expect(syncTags(['autre'], r)).toEqual(['autre'])
+  })
+
+  it('inclut les examens et les notes hors rapport dans la sauvegarde', () => {
+    const q = newQuestion('multichoice', '', 1)
+    q.meta.note = 'à revoir'
+    const out = JSON.parse(backupNotes(undefined, [q], [{ name: 'Intra', items: [q.id] }], qName))
+    expect(out.examens).toEqual([{ nom: 'Intra', questions: [{ nom: 'Nouvelle question', id_origine: null }] }])
+    expect(out.autres_questions[0]).toMatchObject({ note_privee: 'à revoir', etat_application: 'brouillon' })
   })
 })
 

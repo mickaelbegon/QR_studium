@@ -47,6 +47,8 @@ export interface Review {
   cle: string
   doublons: number[]
   edited?: boolean
+  /** Note supprimée dans l'application (on garde la trace pour l'export). */
+  removed?: boolean
 }
 
 export const emptyReview = (): Review => ({ pertinence: '', direction: '', theme: '', probleme: '', correction: '', cle: '', doublons: [] })

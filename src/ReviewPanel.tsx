@@ -6,11 +6,11 @@ export const DIRECTIONS = ['Garder', 'Améliorer', 'Corriger avant usage']
 export const directionClass = (d: string | undefined): string => (d === 'Corriger avant usage' ? 'fix' : d === 'Améliorer' ? 'improve' : d === 'Garder' ? 'keep' : '')
 
 /** Note de révision d'une question : pertinence, direction de travail, problème et correction proposée. */
-export function ReviewBox({ q, onChange }: { q: Question; onChange: (r: Review) => void }) {
+export function ReviewBox({ q, onChange, onCorrected, onRemove }: { q: Question; onChange: (r: Review) => void; onCorrected: () => void; onRemove: () => void }) {
   const r = q.meta.review
-  if (!r)
+  if (!r || r.removed)
     return (
-      <button className="add-review" onClick={() => onChange({ ...emptyReview(), edited: true })}>
+      <button className="add-review" onClick={() => onChange({ ...emptyReview(), origine: r?.origine, theme: r?.theme ?? '', doublons: r?.doublons ?? [], edited: true })}>
         + Ajouter une note de révision
       </button>
     )
@@ -18,7 +18,7 @@ export function ReviewBox({ q, onChange }: { q: Question; onChange: (r: Review) 
   const area = (key: 'probleme' | 'correction' | 'cle', label: string) => (
     <label>
       {label}
-      <textarea key={q.id + key + (r.edited ? '' : 'r')} rows={2} defaultValue={r[key]} onBlur={(e) => e.target.value !== r[key] && set({ [key]: e.target.value })} />
+      <textarea key={q.id + key + '|' + r[key]} rows={2} defaultValue={r[key]} onBlur={(e) => e.target.value !== r[key] && set({ [key]: e.target.value })} />
     </label>
   )
   return (
@@ -27,6 +27,17 @@ export function ReviewBox({ q, onChange }: { q: Question; onChange: (r: Review) 
         <strong className="grow">Note de révision</strong>
         {r.theme && <span className="hint">{r.theme}</span>}
         {r.origine != null && <span className="hint">ID d’origine : {r.origine}</span>}
+      </div>
+      <div className="row">
+        {(r.direction !== 'Garder' || r.probleme || r.correction || r.cle) && (
+          <button className="done" onClick={onCorrected} title="Passe la direction à « Garder », efface le problème et la correction, et range la question dans la catégorie de sa pertinence">
+            ✓ Marquer comme corrigée
+          </button>
+        )}
+        <span className="grow" />
+        <button className="danger" onClick={onRemove} title="Retire entièrement la note de révision de cette question">
+          Supprimer la note
+        </button>
       </div>
       <div className="row">
         <label>
@@ -65,7 +76,7 @@ export function ReportView({ reports, questions, onCreate, existing, onOpen, onE
         <p>Importez le fichier JSON d’analyse qui accompagne une banque : ses notes seront rattachées aux questions.</p>
       </div>
     )
-  const reviewed = questions.filter((q) => q.meta.review)
+  const reviewed = questions.filter((q) => q.meta.review && !q.meta.review.removed)
   const count = (d: string) => reviewed.filter((q) => q.meta.review!.direction === d).length
   return (
     <div className="report">
