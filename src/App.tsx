@@ -28,7 +28,9 @@ const stamp = () => {
 }
 const fileSafe = (s: string) => s.replace(/[^\p{L}\p{N}_-]+/gu, '_').slice(0, 60) || 'questions'
 const AUTO_KEY = 'qr.auto'
-const isTyping = (t: EventTarget | null) => t instanceof HTMLElement && (t.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(t.tagName))
+const FRESH_KEY = 'qr.fresh'
+// Une case à cocher ne bloque pas les raccourcis clavier.
+const isTyping = (t: EventTarget | null) => t instanceof HTMLElement && !(t instanceof HTMLInputElement && t.type === 'checkbox') && (t.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(t.tagName))
 
 export default function App() {
   const bank = useBank()
@@ -54,6 +56,10 @@ export default function App() {
   })
   const [print, setPrint] = useState<{ exam: Exam; corrige: boolean } | null>(null)
   const [toast, setToast] = useState('')
+  const [undo, setUndo] = useState<(() => void) | null>(null)
+  const toastTimer = useRef(0)
+  const [picked, setPicked] = useState<Set<string>>(new Set())
+  const lastPick = useRef<string | null>(null)
   const [busy, setBusy] = useState(false)
   const fileInput = useRef<HTMLInputElement>(null)
   const searchInput = useRef<HTMLInputElement>(null)
@@ -66,9 +72,15 @@ export default function App() {
       /* préférence non mémorisée */
     }
   }
-  const say = (msg: string) => {
+  /** Message en bas d'écran ; avec `onUndo`, il reste plus longtemps et propose « Annuler ». */
+  const say = (msg: string, onUndo?: () => void) => {
+    clearTimeout(toastTimer.current)
     setToast(msg)
-    setTimeout(() => setToast(''), 5000)
+    setUndo(onUndo ? () => onUndo : null)
+    toastTimer.current = window.setTimeout(() => {
+      setToast('')
+      setUndo(null)
+    }, onUndo ? 15000 : 5000)
   }
 
   // ---- Index de recherche, alertes, arborescence ----
@@ -160,6 +172,52 @@ export default function App() {
     ;(async () => {
       try {
         const list: { name: string; size: number; mtime: number }[] = await (await fetch('/api/data-prive')).json()
+        const remember = () => {
+          try {
+            localStorage.setItem(AUTO_KEY, JSON.stringify(Object.fromEntries(list.map((f) => [f.name, `${f.size}-${f.mtime}`]))))
+          } catch {
+            /* les fichiers seront simplement relus au prochain lancement */
+          }
+        }
+        // Banque vide (autre navigateur, données du site effacées) : la dernière sauvegarde passe avant
+        // les fichiers d'origine, sauf si la banque vient d'être vidée volontairement.
+        let fresh = false
+        try {
+          fresh = localStorage.getItem(FRESH_KEY) === '1'
+          localStorage.removeItem(FRESH_KEY)
+        } catch {
+          /* pas de préférence mémorisée */
+        }
+        if (!questions.length && !fresh) {
+          const saves: { name: string }[] = await (await fetch('/api/data-prive?dossier=sauvegardes')).json()
+          const latest = saves.map((f) => f.name).filter((n) => n.startsWith('banque-')).sort().pop()
+          if (latest) {
+            const day = latest.slice(7, 17)
+            const get = async (name: string) => {
+              const r = await fetch('/api/data-prive?dossier=sauvegardes&name=' + name)
+              return r.ok ? new File([await r.blob()], name) : null
+            }
+            setBusy(true)
+            say(`Restauration de la sauvegarde du ${day}…`)
+            const notes = saves.some((f) => f.name === `notes-${day}.json`) ? await get(`notes-${day}.json`) : null
+            const xml = await get(latest)
+            if (xml) {
+              await importFiles(notes ? [xml, notes] : [xml])
+              let exams = 0
+              if (notes) {
+                try {
+                  exams = await bank.restoreExams(JSON.parse(await notes.text()).examens ?? [])
+                } catch {
+                  /* fichier de notes sans examens */
+                }
+              }
+              // Les fichiers d'origine sont déjà contenus dans la sauvegarde : inutile de les réimporter.
+              remember()
+              say(`Banque restaurée depuis la sauvegarde du ${day}` + (exams ? ` (${exams} examen${exams > 1 ? 's' : ''}).` : '.'))
+              return
+            }
+          }
+        }
         let seen: Record<string, string> = {}
         try {
           seen = JSON.parse(localStorage.getItem(AUTO_KEY) ?? '{}')
@@ -241,6 +299,33 @@ export default function App() {
     const r = q.meta.review
     if (!r || !confirm('Supprimer la note de révision de cette question ?')) return
     await changeReview(q, { ...emptyReview(), origine: r.origine, theme: r.theme, doublons: r.doublons, edited: true, removed: true }, { note: 'Note de révision supprimée' })
+  }
+
+  // ---- Sélection par cases à cocher et suppression en lot ----
+  const pickedShown = filtered.filter((q) => picked.has(q.id))
+  const togglePick = (id: string, range: boolean) => {
+    const next = new Set(picked)
+    const on = !next.has(id)
+    const a = filtered.findIndex((q) => q.id === lastPick.current)
+    const b = filtered.findIndex((q) => q.id === id)
+    // Maj+clic : toute la plage depuis la dernière case cochée.
+    if (range && a >= 0 && b >= 0) for (const q of filtered.slice(Math.min(a, b), Math.max(a, b) + 1)) on ? next.add(q.id) : next.delete(q.id)
+    else on ? next.add(id) : next.delete(id)
+    lastPick.current = id
+    setPicked(next)
+  }
+  const deletePicked = async () => {
+    const gone = pickedShown
+    if (!gone.length || !leaveEdit()) return
+    if (!confirm(`Supprimer ${gone.length} question${gone.length > 1 ? 's' : ''} de la banque locale ?`)) return
+    const examsBefore = exams
+    await bank.removeQuestions(gone.map((q) => q.id))
+    setPicked(new Set())
+    if (gone.some((q) => q.id === sel)) setSel(null)
+    say(`${gone.length} question${gone.length > 1 ? 's' : ''} supprimée${gone.length > 1 ? 's' : ''}.`, async () => {
+      await bank.restore(gone, examsBefore)
+      say(`${gone.length} question${gone.length > 1 ? 's' : ''} rétablie${gone.length > 1 ? 's' : ''}.`)
+    })
   }
 
   const exportXml = (qs: Question[], label: string) => {
@@ -426,6 +511,12 @@ export default function App() {
                 onClick={() => {
                   if (confirm('Vider complètement la banque locale (questions, examens, historique) ? Vos fichiers XML d’origine ne sont pas touchés.')) {
                     bank.clear()
+                    // Au prochain lancement : repartir des fichiers d'origine, pas de la sauvegarde.
+                    try {
+                      localStorage.setItem(FRESH_KEY, '1')
+                    } catch {
+                      /* sans effet si le stockage est indisponible */
+                    }
                     setSel(null)
                   }
                 }}
@@ -534,6 +625,28 @@ export default function App() {
             <section className="list">
               <div className="list-head">
                 <input ref={searchInput} type="search" placeholder="Rechercher dans les énoncés, réponses, étiquettes…" value={query} onChange={(e) => setQuery(e.target.value)} onKeyDown={(e) => e.key === 'Escape' && e.currentTarget.blur()} />
+                <div className="bulk">
+                  <label className="check" title="Cocher ou décocher toutes les questions affichées">
+                    <input
+                      type="checkbox"
+                      checked={filtered.length > 0 && pickedShown.length === filtered.length}
+                      ref={(el) => {
+                        if (el) el.indeterminate = pickedShown.length > 0 && pickedShown.length < filtered.length
+                      }}
+                      onChange={(e) => setPicked(e.target.checked ? new Set(filtered.map((q) => q.id)) : new Set())}
+                    />
+                    {pickedShown.length ? `${pickedShown.length} sélectionnée${pickedShown.length > 1 ? 's' : ''}` : 'Tout cocher'}
+                  </label>
+                  <span className="grow" />
+                  {pickedShown.length > 0 && (
+                    <>
+                      <button onClick={() => setPicked(new Set())}>Décocher</button>
+                      <button className="danger solid" onClick={deletePicked}>
+                        Supprimer ({pickedShown.length})
+                      </button>
+                    </>
+                  )}
+                </div>
                 <div className="list-count">
                   {filtered.length} question{filtered.length > 1 ? 's' : ''} · {+filtered.reduce((s, q) => s + points(q), 0).toFixed(2)} points
                 </div>
@@ -543,7 +656,8 @@ export default function App() {
                   const level = worst(issues.get(q.id) ?? [])
                   const inExam = !!exam?.items.includes(q.id)
                   return (
-                    <div key={q.id} className={'q-row' + (q.id === sel ? ' active' : '')} onClick={() => select(q.id)}>
+                    <div key={q.id} className={'q-row' + (q.id === sel ? ' active' : '') + (picked.has(q.id) ? ' picked' : '')} onClick={() => select(q.id)}>
+                      <input type="checkbox" className="pick" title="Sélectionner (Maj+clic pour une plage)" checked={picked.has(q.id)} onClick={(e) => e.stopPropagation()} onChange={(e) => togglePick(q.id, (e.nativeEvent as MouseEvent).shiftKey)} />
                       <span className={'badge t-' + q.type}>{typeShort(q.type)}</span>
                       <div className="grow q-main">
                         <div className="q-name">
@@ -662,7 +776,22 @@ export default function App() {
             </section>
           </main>
         )}
-        {toast && <div className="toast">{toast}</div>}
+        {toast && (
+          <div className="toast">
+            {toast}
+            {undo && (
+              <button
+                onClick={() => {
+                  const fn = undo
+                  setUndo(null)
+                  fn()
+                }}
+              >
+                Annuler
+              </button>
+            )}
+          </div>
+        )}
       </div>
       {print && <PrintSheet exam={print.exam} questions={examQuestions(print.exam)} corrige={print.corrige} />}
     </>

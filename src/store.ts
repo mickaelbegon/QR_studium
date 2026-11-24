@@ -4,7 +4,7 @@ import * as db from './db'
 import { clearFiles, loadIntoMemory, registerFiles } from './files'
 import { type Category, type Exam, type Question, getText, qName, setText, uid } from './model'
 import { parseMoodleXml, signature } from './moodleXml'
-import { type Report, applyReport, parseReport } from './report'
+import { type Report, applyReport, originId, parseReport } from './report'
 
 export function useBank() {
   const [questions, setQuestions] = useState<Question[]>([])
@@ -62,8 +62,12 @@ export function useBank() {
   /** Importe un rapport JSON et rattache ses notes aux questions (par l'étiquette id-origine-<ID>). */
   const importReport = useCallback(async (file: File) => {
     const report = parseReport(await file.text(), file.name)
-    await db.putReport(report)
-    setReports([...ref.current.reports.filter((r) => r.name !== report.name), report])
+    // Un fichier de notes sans analyse (sauvegarde d'une banque sans rapport) ne crée pas d'onglet « Rapport ».
+    const d = report.data
+    if (d.questions.length || d.defauts_recurrents?.length || d.lacunes?.length || d.questions_suggerees?.length) {
+      await db.putReport(report)
+      setReports([...ref.current.reports.filter((r) => r.name !== report.name), report])
+    }
     const changed = applyReport(ref.current.questions, report.data)
     const byId = new Map(changed.map((q) => [q.id, q]))
     await db.putQuestions(changed)
@@ -120,6 +124,44 @@ export function useBank() {
     setExams(ref.current.exams.map((e) => ({ ...e, items: e.items.filter((i) => i !== id) })))
   }, [])
 
+  const removeQuestions = useCallback(async (ids: string[]) => {
+    const gone = new Set(ids)
+    await db.deleteQuestions(ids)
+    setQuestions(ref.current.questions.filter((x) => !gone.has(x.id)))
+    const exams = ref.current.exams.map((e) => (e.items.some((i) => gone.has(i)) ? { ...e, items: e.items.filter((i) => !gone.has(i)) } : e))
+    for (const e of exams) if (e !== ref.current.exams.find((x) => x.id === e.id)) await db.putExam(e)
+    setExams(exams)
+  }, [])
+
+  /** Annule une suppression : remet les questions et les examens tels qu'ils étaient. */
+  const restore = useCallback(async (qs: Question[], exams: Exam[]) => {
+    await db.putQuestions(qs)
+    for (const e of exams) await db.putExam(e)
+    const present = new Set(ref.current.questions.map((q) => q.id))
+    setQuestions([...ref.current.questions, ...qs.filter((q) => !present.has(q.id))].sort((a, b) => a.meta.order - b.meta.order))
+    setExams(exams)
+  }, [])
+
+  /** Recrée les examens décrits dans un fichier de notes de sauvegarde. */
+  const restoreExams = useCallback(async (list: { nom: string; questions: { nom: string; id_origine: number | null }[] }[]) => {
+    const byOrigin = new Map<number, string>()
+    const byName = new Map<string, string>()
+    for (const q of ref.current.questions) {
+      const o = q.meta.review?.origine ?? originId(q)
+      if (o != null) byOrigin.set(o, q.id)
+      byName.set(qName(q), q.id)
+    }
+    const exams: Exam[] = list.map((e, i) => ({
+      id: uid(),
+      name: e.nom,
+      created: Date.now() + i,
+      items: e.questions.map((x) => (x.id_origine != null ? byOrigin.get(x.id_origine) : undefined) ?? byName.get(x.nom)).filter((id): id is string => !!id),
+    }))
+    for (const e of exams) await db.putExam(e)
+    setExams([...ref.current.exams, ...exams])
+    return exams.length
+  }, [])
+
   const saveExam = useCallback(async (e: Exam) => {
     await db.putExam(e)
     const list = ref.current.exams
@@ -140,7 +182,7 @@ export function useBank() {
     setReports([])
   }, [])
 
-  return { questions, categories, exams, reports, loaded, nextOrder, importXml, importReport, saveQuestion, updateMeta, duplicate, removeQuestion, saveExam, removeExam, clear }
+  return { questions, categories, exams, reports, loaded, nextOrder, importXml, importReport, saveQuestion, updateMeta, duplicate, removeQuestion, removeQuestions, restore, restoreExams, saveExam, removeExam, clear }
 }
 
 export type Bank = ReturnType<typeof useBank>

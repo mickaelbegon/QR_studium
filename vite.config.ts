@@ -6,7 +6,8 @@ import react from '@vitejs/plugin-react'
 import type { Plugin } from 'vite'
 import { defineConfig } from 'vitest/config'
 
-const DATA_DIR = fileURLToPath(new URL('./data_prive', import.meta.url))
+// QR_DATA_DIR permet de pointer vers un autre dossier (essais, autre cours).
+const DATA_DIR = process.env.QR_DATA_DIR || fileURLToPath(new URL('./data_prive', import.meta.url))
 const SAVE_DIR = join(DATA_DIR, 'sauvegardes')
 /** Nombre de jours de sauvegarde conservés (une sauvegarde par jour, réécrite au fil de la journée). */
 const KEEP_DAYS = 3
@@ -78,12 +79,16 @@ function dataPrive(): Plugin {
         }
         const url = new URL(req.url ?? '/', 'http://localhost')
         const name = url.searchParams.get('name')
+        // ?dossier=sauvegardes : les sauvegardes automatiques plutôt que les fichiers d'origine.
+        const saves = url.searchParams.get('dossier') === 'sauvegardes'
+        const dir = saves ? SAVE_DIR : DATA_DIR
+        const allowed = (n: string) => (saves ? SAVE_NAME.test(n) : wanted(n))
         try {
           if (name === null) {
-            const files = readdirSync(DATA_DIR, { withFileTypes: true })
-              .filter((d) => d.isFile() && wanted(d.name))
+            const files = readdirSync(dir, { withFileTypes: true })
+              .filter((d) => d.isFile() && allowed(d.name))
               .map((d) => {
-                const s = statSync(join(DATA_DIR, d.name))
+                const s = statSync(join(dir, d.name))
                 return { name: d.name, size: s.size, mtime: Math.round(s.mtimeMs) }
               })
             res.setHeader('Content-Type', 'application/json')
@@ -91,8 +96,8 @@ function dataPrive(): Plugin {
             return
           }
           // Uniquement un fichier situé directement dans data_prive/.
-          if (name !== basename(name) || !wanted(name)) throw new Error('nom refusé')
-          const path = join(DATA_DIR, name)
+          if (name !== basename(name) || !allowed(name)) throw new Error('nom refusé')
+          const path = join(dir, name)
           res.setHeader('Content-Length', statSync(path).size)
           res.setHeader('Content-Type', 'application/octet-stream')
           createReadStream(path).pipe(res)

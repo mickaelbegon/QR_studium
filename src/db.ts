@@ -18,7 +18,14 @@ function open(): Promise<IDBDatabase> {
       if (!has('versions')) db.createObjectStore('versions', { keyPath: 'vid', autoIncrement: true }).createIndex('qid', 'qid')
       if (!has('reports')) db.createObjectStore('reports', { keyPath: 'name' })
     }
-    req.onsuccess = () => resolve(req.result)
+    req.onsuccess = () => {
+      // Un autre onglet veut mettre à jour ou effacer la base : on libère la connexion au lieu de le bloquer.
+      req.result.onversionchange = () => {
+        req.result.close()
+        dbp = null
+      }
+      resolve(req.result)
+    }
     req.onerror = () => reject(req.error)
   })
   return dbp

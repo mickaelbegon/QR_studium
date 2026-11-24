@@ -41,6 +41,7 @@ d'ajouter au test toutes les questions de cette catégorie.
 - Aperçu avec corrigé : choix multiple, vrai/faux, appariement, cloze, réponse courte,
   numérique, description.
 - Recherche plein texte, filtres par catégorie, type, statut et alertes.
+- Sélection par cases à cocher (Maj+clic pour une plage) et suppression en lot, annulable.
 - Éditeur par type de question avec aperçu en direct ; création et duplication en variante.
 - Contrôle qualité : fractions incohérentes, absence de bonne réponse, images manquantes ou
   inutilisées, doublons, HTML collé depuis Word, cloze mal formé.
@@ -64,6 +65,10 @@ Quelques secondes après chaque modification, l'application écrit une sauvegard
 l'application ou dans StudiUM) et `notes-AAAA-MM-JJ.json` (notes de révision, statuts, notes
 privées, composition des examens). Il y a une sauvegarde par jour, réécrite au fil de la journée ;
 les trois derniers jours sont conservés. L'historique des versions n'est pas sauvegardé.
+
+Si la banque du navigateur est vide au lancement (autre navigateur, données du site effacées),
+la sauvegarde la plus récente est restaurée en priorité, examens compris ; les fichiers d'origine
+de `data_prive/` ne servent que s'il n'y a aucune sauvegarde, ou après « Vider la banque locale ».
 
 Les données de l'application vivent dans le navigateur utilisé : changer de navigateur ou
 effacer ses données de site vide la banque locale. Exportez régulièrement toute la banque.
