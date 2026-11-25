@@ -124,6 +124,7 @@ export default function App() {
     },
   })
   const fileInput = useRef<HTMLInputElement>(null)
+  const updateInput = useRef<HTMLInputElement>(null)
   const searchInput = useRef<HTMLInputElement>(null)
 
   const setExamId = (id: string | null) => {
@@ -221,6 +222,26 @@ export default function App() {
       say(msgs.join(' · ') + '.')
     } catch (e) {
       alert('Import impossible : ' + (e instanceof Error ? e.message : String(e)))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  /** Remplace le contenu des questions de la banque par celui d'un fichier corrigé (même identifiant d'origine ou même nom). */
+  const updateFromFile = async (file: File | undefined) => {
+    if (!file || !leaveEdit()) return
+    setBusy(true)
+    try {
+      const plan = await bank.planUpdate(file)
+      const n = plan.updates.length
+      const rest = `${plan.same} identique${plan.same > 1 ? 's' : ''}` + (plan.unknown ? `, ${plan.unknown} sans correspondance dans la banque (ignorée${plan.unknown > 1 ? 's' : ''})` : '')
+      if (!n) return say(`Aucune question à mettre à jour : ${rest}.`)
+      const names = plan.updates.slice(0, 8).map((q) => '• ' + (qName(q) || '(sans nom)')).join('\n')
+      if (!confirm(`« ${file.name} » modifie ${n} question${n > 1 ? 's' : ''} de la banque (${rest}).\n\n${names}${n > 8 ? `\n… et ${n - 8} autre${n - 8 > 1 ? 's' : ''}` : ''}\n\nLa version actuelle de chacune restera dans son historique. Catégories, étiquettes, notes et examens ne changent pas. Continuer ?`)) return
+      await bank.applyUpdate(plan, `Mise à jour depuis ${file.name}`)
+      say(`${n} question${n > 1 ? 's' : ''} mise${n > 1 ? 's' : ''} à jour depuis « ${file.name} ».`)
+    } catch (e) {
+      alert('Mise à jour impossible : ' + (e instanceof Error ? e.message : String(e)))
     } finally {
       setBusy(false)
     }
@@ -594,6 +615,10 @@ export default function App() {
               ))}
               {exam && <button onClick={() => exportExam(exam)}>L’examen « {exam.name} »</button>}
               <hr />
+              <button disabled={busy || !questions.length} title="Remplace le contenu des questions déjà dans la banque par celui d’un fichier Moodle XML corrigé. Les questions sont reconnues par leur identifiant d’origine ou leur nom ; rien n’est ajouté." onClick={() => updateInput.current?.click()}>
+                Appliquer un fichier corrigé (XML)…
+              </button>
+              <input ref={updateInput} type="file" accept=".xml" hidden onChange={(e) => updateFromFile(e.target.files?.[0]).then(() => (e.target.value = ''))} />
               <button
                 className="danger"
                 onClick={() => {

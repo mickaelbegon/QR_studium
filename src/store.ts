@@ -3,8 +3,24 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import * as db from './db'
 import { clearFiles, loadIntoMemory, registerFiles } from './files'
 import { type Category, type Exam, type Question, getText, qName, setText, uid } from './model'
-import { parseMoodleXml, signature } from './moodleXml'
+import { parseMoodleXml, serializeQuestion, signature } from './moodleXml'
 import { type Report, applyReport, originId, parseReport } from './report'
+
+/** Clé stable d'une question d'un fichier à l'autre : son identifiant d'origine, sinon son type et son nom. */
+const matchKey = (q: Question): string => {
+  const o = originId(q)
+  return o !== null ? 'o' + o : 'n' + q.type + '\n' + qName(q)
+}
+/** Contenu d'une question, hors catégorie et étiquettes (qui restent celles de la banque). */
+const body = (q: Question): string => serializeQuestion({ ...q, tags: [], hasTags: false }, (h) => h)
+
+export interface UpdatePlan {
+  /** Questions de la banque dont le contenu sera remplacé. */
+  updates: Question[]
+  same: number
+  unknown: number
+  files: Map<string, string>
+}
 
 export function useBank() {
   const [questions, setQuestions] = useState<Question[]>([])
@@ -57,6 +73,47 @@ export function useBank() {
     setQuestions([...ref.current.questions, ...added])
     setCategories(cats)
     return { added: added.length, skipped }
+  }, [])
+
+  /**
+   * Compare un fichier XML corrigé à la banque : les questions reconnues dont le contenu diffère
+   * seront remplacées. Rien n'est écrit tant que `applyUpdate` n'est pas appelé.
+   */
+  const planUpdate = useCallback(async (file: File): Promise<UpdatePlan> => {
+    const parsed = parseMoodleXml(await file.text(), file.name)
+    // Une clé portée par deux questions de la banque est ambiguë : on n'y touche pas.
+    const mine = new Map<string, Question | null>()
+    for (const q of ref.current.questions) {
+      const k = matchKey(q)
+      mine.set(k, mine.has(k) ? null : q)
+    }
+    const updates: Question[] = []
+    const seen = new Set<string>()
+    let same = 0
+    let unknown = 0
+    for (const q of parsed.questions) {
+      const k = matchKey(q)
+      const cur = mine.get(k)
+      if (!cur || seen.has(k)) {
+        unknown++
+        continue
+      }
+      seen.add(k)
+      if (body(cur) === body(q)) same++
+      else updates.push({ ...q, id: cur.id, category: cur.category, tags: cur.tags, hasTags: cur.hasTags, meta: cur.meta })
+    }
+    return { updates, same, unknown, files: parsed.files }
+  }, [])
+
+  /** Applique un plan de mise à jour ; chaque version remplacée va dans l'historique. */
+  const applyUpdate = useCallback(async (plan: UpdatePlan, note: string) => {
+    await registerFiles(plan.files)
+    const now = Date.now()
+    const next = new Map(plan.updates.map((q) => [q.id, { ...q, meta: { ...q.meta, modified: now } }]))
+    for (const prev of ref.current.questions) if (next.has(prev.id)) await db.addVersion({ qid: prev.id, date: prev.meta.modified, note, snapshot: prev })
+    await db.putQuestions([...next.values()])
+    setQuestions(ref.current.questions.map((q) => next.get(q.id) ?? q))
+    return next.size
   }, [])
 
   /** Importe un rapport JSON et rattache ses notes aux questions (par l'étiquette id-origine-<ID>). */
@@ -182,7 +239,7 @@ export function useBank() {
     setReports([])
   }, [])
 
-  return { questions, categories, exams, reports, loaded, nextOrder, importXml, importReport, saveQuestion, updateMeta, duplicate, removeQuestion, removeQuestions, restore, restoreExams, saveExam, removeExam, clear }
+  return { questions, categories, exams, reports, loaded, nextOrder, importXml, importReport, planUpdate, applyUpdate, saveQuestion, updateMeta, duplicate, removeQuestion, removeQuestions, restore, restoreExams, saveExam, removeExam, clear }
 }
 
 export type Bank = ReturnType<typeof useBank>
