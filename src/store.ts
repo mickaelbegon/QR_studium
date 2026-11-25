@@ -116,6 +116,20 @@ export function useBank() {
     return next.size
   }, [])
 
+  /** Rattache des propositions de distracteurs aux questions, par identifiant d'origine. */
+  const importProposals = useCallback(async (proposals: Map<number, Question['meta']['proposal']>) => {
+    const changed: Question[] = []
+    for (const q of ref.current.questions) {
+      const o = originId(q)
+      const proposal = o === null ? undefined : proposals.get(o)
+      if (proposal) changed.push({ ...q, meta: { ...q.meta, proposal } })
+    }
+    const byId = new Map(changed.map((q) => [q.id, q]))
+    await db.putQuestions(changed)
+    setQuestions(ref.current.questions.map((q) => byId.get(q.id) ?? q))
+    return { matched: changed.length, total: proposals.size }
+  }, [])
+
   /** Importe un rapport JSON et rattache ses notes aux questions (par l'étiquette id-origine-<ID>). */
   const importReport = useCallback(async (file: File) => {
     const report = parseReport(await file.text(), file.name)
@@ -145,6 +159,15 @@ export function useBank() {
       setCategories(cats)
     }
     return next
+  }, [])
+
+  /** Remplace les métadonnées d'une question (sans entrée d'historique). */
+  const saveMeta = useCallback(async (id: string, meta: Question['meta']) => {
+    const prev = ref.current.questions.find((x) => x.id === id)
+    if (!prev) return
+    const next = { ...prev, meta }
+    await db.putQuestions([next])
+    setQuestions(ref.current.questions.map((x) => (x.id === id ? next : x)))
   }, [])
 
   /** Statut et note privée : pas d'entrée d'historique, rien n'est exporté. */
@@ -239,7 +262,7 @@ export function useBank() {
     setReports([])
   }, [])
 
-  return { questions, categories, exams, reports, loaded, nextOrder, importXml, importReport, planUpdate, applyUpdate, saveQuestion, updateMeta, duplicate, removeQuestion, removeQuestions, restore, restoreExams, saveExam, removeExam, clear }
+  return { questions, categories, exams, reports, loaded, nextOrder, importXml, importReport, importProposals, planUpdate, applyUpdate, saveQuestion, updateMeta, saveMeta, duplicate, removeQuestion, removeQuestions, restore, restoreExams, saveExam, removeExam, clear }
 }
 
 export type Bank = ReturnType<typeof useBank>

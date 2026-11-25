@@ -53,10 +53,26 @@ export interface Review {
 
 export const emptyReview = (): Review => ({ pertinence: '', direction: '', theme: '', probleme: '', correction: '', cle: '', doublons: [] })
 
+/** Distracteurs proposés pour une question (fichier de propositions importé). */
+export interface Proposal {
+  probleme: string
+  type: string
+  priorite: string
+  bonne: string
+  actuels: string[]
+  proposes: { texte: string; erreur: string }[]
+  /** Un fait de la matière est à valider par le professeur. */
+  verifier: boolean
+  note: string
+  /** La question repose sur une image que l'auteur de la proposition n'a pas vue. */
+  image: boolean
+}
+
 export interface QuestionMeta {
   status: Status
   note: string
   review?: Review
+  proposal?: Proposal
   source?: string
   order: number
   created: number

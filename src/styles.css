@@ -349,3 +349,12 @@ button.on-claude { background: var(--accent-soft); color: var(--accent); border-
 .col-grip.claude-grip { left: -4px; z-index: 41; }
 body.resizing { cursor: col-resize; user-select: none; }
 @media print { .col-grip { display: none; } }
+
+/* Propositions de distracteurs */
+.review.proposal { border-left-color: #6941c6; }
+.review.proposal.fix { border-left-color: var(--err); }
+.review.proposal.improve { border-left-color: #e08a00; }
+.chip.low { background: #eef0f3; color: var(--muted); }
+.proposal-list { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 3px; }
+.proposal-list small { color: var(--muted); }
+.proposal-list li.same > span { color: var(--muted); }

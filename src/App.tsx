@@ -9,6 +9,7 @@ import { serializeBank } from './moodleXml'
 import { Issues, QuestionPreview } from './Preview'
 import { type Report, type Suggestion, backupNotes, correctedCategory, exportReport, sameTags, syncTags } from './report'
 import { DIRECTIONS, PERTINENCES, ReportView, ReviewBox, directionClass } from './ReviewPanel'
+import { ProposalBox, parseProposals } from './Proposals'
 import { useBank } from './store'
 import { StudentView } from './Student'
 import { ClaudePanel } from './Claude'
@@ -53,6 +54,7 @@ export default function App() {
   const [fType, setFType] = useState('')
   const [fStatus, setFStatus] = useState('')
   const [fIssues, setFIssues] = useState(false)
+  const [fProp, setFProp] = useState(false)
   const [cat, setCat] = useState<string | null>(null)
   const [examId, setExamIdRaw] = useState<string | null>(() => {
     try {
@@ -175,6 +177,7 @@ export default function App() {
       if (fType && q.type !== fType) return false
       if (fStatus && (q.meta.status || 'aucun') !== fStatus) return false
       if (fIssues && !worst(issues.get(q.id) ?? [])) return false
+      if (fProp && !q.meta.proposal) return false
       if (fPert && (q.meta.review?.pertinence ?? '') !== fPert) return false
       if (fDir && (q.meta.review?.direction ?? '') !== fDir) return false
       if (cat !== null) {
@@ -184,7 +187,7 @@ export default function App() {
       const text = index.get(q.id) ?? ''
       return words.every((w) => text.includes(w))
     })
-  }, [questions, query, fType, fStatus, fIssues, fPert, fDir, cat, index, issues])
+  }, [questions, query, fType, fStatus, fIssues, fProp, fPert, fDir, cat, index, issues])
 
   const current = questions.find((q) => q.id === sel) ?? null
   const exam = exams.find((e) => e.id === examId) ?? null
@@ -216,6 +219,13 @@ export default function App() {
       }
       // Le rapport passe après le XML pour retrouver ses questions.
       for (const f of json) {
+        // Un fichier de propositions de distracteurs se reconnaît à son contenu.
+        const proposals = parseProposals(await f.text())
+        if (proposals) {
+          const p = await bank.importProposals(proposals)
+          msgs.push(`« ${f.name} » : ${p.matched} proposition${p.matched > 1 ? 's' : ''} de distracteurs rattachée${p.matched > 1 ? 's' : ''} sur ${p.total}`)
+          continue
+        }
         const r = await bank.importReport(f)
         msgs.push(`rapport « ${f.name} » : ${r.matched} note${r.matched > 1 ? 's' : ''} rattachée${r.matched > 1 ? 's' : ''} sur ${r.total}`)
       }
@@ -732,6 +742,12 @@ export default function App() {
                 <input type="checkbox" checked={fIssues} onChange={(e) => setFIssues(e.target.checked)} />
                 Avec alertes seulement
               </label>
+              {questions.some((q) => q.meta.proposal) && (
+                <label className="check">
+                  <input type="checkbox" checked={fProp} onChange={(e) => setFProp(e.target.checked)} />
+                  Avec distracteurs proposés ({questions.filter((q) => q.meta.proposal).length})
+                </label>
+              )}
               <p className="hint keys">
                 Clavier : ↑ ↓ naviguer · <kbd>e</kbd> modifier · <kbd>a</kbd> ajouter à l’examen · <kbd>/</kbd> rechercher
               </p>
@@ -787,6 +803,7 @@ export default function App() {
                           {q.meta.review.direction === 'Améliorer' ? 'Améliorer' : 'À corriger'}
                         </span>
                       )}
+                      {q.meta.proposal && <span className={'chip ' + (q.meta.proposal.priorite === 'haute' ? 'fix' : q.meta.proposal.priorite === 'moyenne' ? 'improve' : 'low')} title={'Distracteurs proposés : ' + q.meta.proposal.probleme}>Distr.</span>}
                       {level && <span className={'flag ' + level} title={(issues.get(q.id) ?? []).map((i) => i.msg).join('\n')}>!</span>}
                       <button className={'add' + (inExam ? ' on' : '')} title={inExam ? 'Retirer de l’examen en cours' : 'Ajouter à l’examen en cours'} onClick={(e) => (e.stopPropagation(), toggleExam(q))}>
                         {inExam ? '✓' : '+'}
@@ -876,6 +893,18 @@ export default function App() {
                     </div>
                   )}
                   <ReviewBox q={current} onChange={(review) => changeReview(current, review)} onCorrected={() => markCorrected(current)} onRemove={() => removeReview(current)} />
+                  <ProposalBox
+                    q={current}
+                    onEdit={() => setEditing(true)}
+                    onApply={async (next) => {
+                      await bank.saveQuestion(next, 'Distracteurs proposés appliqués')
+                      say('Distracteurs remplacés. L’ancienne version reste dans l’historique.')
+                    }}
+                    onDismiss={() => {
+                      const { proposal: _gone, ...meta } = current.meta
+                      bank.saveMeta(current.id, meta)
+                    }}
+                  />
                   <Issues issues={issues.get(current.id) ?? []} />
                   <div className="tabs">
                     <button className={tab === 'preview' ? 'on' : ''} onClick={() => setTab('preview')}>

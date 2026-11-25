@@ -244,3 +244,24 @@ describe('unités des questions numériques', () => {
     expect(q.extra.some((x) => x.startsWith('<units'))).toBe(false)
   })
 })
+
+describe('propositions de distracteurs', () => {
+  it('lit le fichier et remplace les mauvaises réponses, en gardant celles qui sont conservées', async () => {
+    const { applyProposal, parseProposals } = await import('../src/Proposals')
+    const xml = `<quiz><question type="multichoice"><name><text>Q</text></name><questiontext format="html"><text>?</text></questiontext><single>true</single>
+    <answer fraction="100" format="html"><text><![CDATA[<p>bonne</p>]]></text><feedback format="html"><text>oui</text></feedback></answer>
+    <answer fraction="0" format="html"><text><![CDATA[<p>blague</p>]]></text><feedback format="html"><text>non, blague</text></feedback></answer>
+    <answer fraction="0" format="html"><text><![CDATA[<p>plausible</p>]]></text><feedback format="html"><text>non</text></feedback></answer>
+    <tags><tag><text>id-origine-42</text></tag></tags></question></quiz>`
+    const q = parseMoodleXml(xml, 't').questions[0]
+    expect(parseProposals('{"questions": []}')).toBeNull()
+    const map = parseProposals(JSON.stringify([{ id_origine: '42', probleme: 'p', priorite: 'haute', distracteurs_proposes: [{ texte: 'Plausible', erreur_visee: 'conservé' }, { texte: 'a < b', erreur_visee: 'signe' }] }]))!
+    const p = map.get(42)!
+    const next = applyProposal({ ...q, meta: { ...q.meta, proposal: p } }, p)!
+    expect(next.answers.map((a) => a.rt.text)).toEqual(['<p>bonne</p>', '<p>a &lt; b</p>', '<p>plausible</p>'])
+    expect(next.answers.map((a) => a.feedback?.text)).toEqual(['oui', '', 'non'])
+    expect(next.meta.proposal).toBeUndefined()
+    // Nombre de choix différent : pas de substitution automatique.
+    expect(applyProposal(q, { ...p, proposes: p.proposes.slice(0, 1) })).toBeNull()
+  })
+})
