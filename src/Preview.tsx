@@ -1,6 +1,8 @@
 import { useMemo } from 'react'
+import { dragBoxes, dropZones } from './dragbox'
 import { renderRt } from './files'
 import type { Issue } from './lint'
+import { getUnits, unitMode } from './units'
 import { type Question, type RichText, getProp, getText, plain, typeLabel } from './model'
 
 export function Html({ rt, cloze, showAnswers, className }: { rt?: RichText; cloze?: boolean; showAnswers?: boolean; className?: string }) {
@@ -16,11 +18,34 @@ const TF: Record<string, string> = { true: 'Vrai', false: 'Faux' }
 export function QuestionPreview({ q, showAnswers = true }: { q: Question; showAnswers?: boolean }) {
   const single = getProp(q, 'single') !== 'false'
   const general = getText(q, 'generalfeedback')
-  const known = ['multichoice', 'truefalse', 'matching', 'cloze', 'description', 'shortanswer', 'numerical', 'essay'].includes(q.type)
+  const known = ['multichoice', 'truefalse', 'matching', 'cloze', 'description', 'shortanswer', 'numerical', 'essay', 'ddwtos'].includes(q.type)
+  // Glisser-déposer sur texte : chaque zone [[n]] montre le choix attendu.
+  const statement = getText(q, 'questiontext')
+  const drags = useMemo(() => (q.type === 'ddwtos' ? dragBoxes(q).map((b) => b.box) : []), [q])
+  const body = useMemo(
+    () =>
+      q.type === 'ddwtos' && statement
+        ? { ...statement, text: statement.text.replace(/\[\[(\d+)\]\]/g, (m, n) => (!drags[+n - 1] ? m : showAnswers ? `<span class="cloze"><span class="cloze-opt ok">${drags[+n - 1].text}</span></span>` : '<span class="cloze blank">__________</span>')) }
+        : statement,
+    [q, showAnswers],
+  )
+  const zones = q.type === 'ddwtos' ? dropZones(statement?.text ?? '') : []
 
   return (
     <div className="preview">
-      <Html rt={getText(q, 'questiontext')} cloze={q.type === 'cloze'} showAnswers={showAnswers} />
+      <Html rt={body} cloze={q.type === 'cloze'} showAnswers={showAnswers} />
+
+      {q.type === 'ddwtos' && drags.length > 0 && (
+        <p className="choices">
+          Choix à déposer :{' '}
+          {drags.map((b, i) => (
+            <span key={i} className={'drag-chip' + (showAnswers && !zones.includes(i + 1) ? ' off' : '')} title={`Groupe ${b.group}` + (b.infinite ? ' · réutilisable' : '') + (zones.includes(i + 1) ? '' : ' · distracteur')}>
+              <span dangerouslySetInnerHTML={{ __html: renderRt({ format: 'html', text: b.text, files: [] }) }} />
+              {drags.some((x) => x.group !== b.group) && <small> g{b.group}</small>}
+            </span>
+          ))}
+        </p>
+      )}
 
       {(q.type === 'multichoice' || q.type === 'truefalse') && (
         <ul className="answers">
@@ -85,6 +110,16 @@ export function QuestionPreview({ q, showAnswers = true }: { q: Question; showAn
         ) : (
           <p className="blank">Réponse : ______________________</p>
         ))}
+
+      {q.type === 'numerical' && showAnswers && unitMode(q) !== 'none' && (
+        <p className="choices">
+          Unités :{' '}
+          {getUnits(q)
+            .map((u) => u.name + (parseFloat(u.multiplier) === 1 ? '' : ` (× ${u.multiplier})`))
+            .join(' · ') || '(aucune)'}
+          {unitMode(q) === 'graded' ? ` — exigée, pénalité ${+(parseFloat(getProp(q, 'unitpenalty') ?? '0') || 0).toFixed(3)}` : ' — facultative'}
+        </p>
+      )}
 
       {!known && <p className="hint">Type « {typeLabel(q.type)} » : aperçu partiel. La question est conservée telle quelle à l’export.</p>}
 

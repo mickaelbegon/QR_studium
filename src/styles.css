@@ -330,3 +330,13 @@ button.on-claude { background: var(--accent-soft); color: var(--accent); border-
 .claude-wait { color: var(--muted); font-style: italic; }
 @media (max-width: 1300px) { .app.with-claude .layout { grid-template-columns: 0 minmax(240px, 320px) 1fr; } .app.with-claude .sidebar { display: none; } }
 @media print { .claude { display: none; } .app.with-claude { margin-right: 0; } }
+
+/* Éditeur : choix à déposer (glisser-déposer sur texte) */
+.drag-row { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.drag-row code { min-width: 44px; text-align: center; color: var(--muted); }
+.drag-row code.used { color: var(--ok, #357a32); font-weight: 700; }
+.drag-row select { width: auto; }
+.drag-row button { padding: 3px 9px; }
+.drag-chip { display: inline-block; border: 1px solid var(--line); border-radius: 5px; padding: 1px 8px; margin: 2px 4px 2px 0; background: var(--panel); }
+.drag-chip.off { color: var(--muted); border-style: dashed; }
+.drag-chip small { color: var(--muted); }

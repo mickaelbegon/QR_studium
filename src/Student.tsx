@@ -3,7 +3,9 @@
 import { useMemo, useRef, useState } from 'react'
 import { type ClozePart, parseCloze } from './cloze'
 import { points } from './Exams'
+import { dragBoxes } from './dragbox'
 import { renderRt } from './files'
+import { getUnits, gradeNumerical, unitChoice } from './units'
 import { type Answer, type Question, type RichText, getProp, getText, plain } from './model'
 import { Html } from './Preview'
 
@@ -57,12 +59,7 @@ const tolerance = (a: Answer) => parseFloat(/<tolerance>([^<]*)<\/tolerance>/.ex
 
 /** Choix à déposer d'une question « glisser-déposer sur texte ». */
 function dragChoices(q: Question): string[] {
-  const out: string[] = []
-  for (const x of q.extra) {
-    const el = new DOMParser().parseFromString(x, 'text/xml').documentElement
-    if (el.tagName === 'dragbox') out.push(el.getElementsByTagName('text')[0]?.textContent ?? '')
-  }
-  return out
+  return dragBoxes(q).map((b) => b.box.text)
 }
 
 function gradeClozePart(p: ClozePart, root: HTMLElement, i: number): { fraction: number; answered: boolean; feedback: string } {
@@ -96,6 +93,7 @@ function Attempt({ q, number, onRetry }: { q: Question; number: number; onRetry:
   const [picked, setPicked] = useState<Set<string>>(new Set())
   const [pairs, setPairs] = useState<Record<string, string>>({})
   const [typed, setTyped] = useState('')
+  const [unit, setUnit] = useState('')
   const [result, setResult] = useState<{ fraction: number | null; answered: boolean } | null>(null)
   const inline = useRef<HTMLDivElement>(null)
 
@@ -137,8 +135,8 @@ function Attempt({ q, number, onRetry }: { q: Question; number: number; onRetry:
       fraction = rows.length ? rows.filter((s) => pairs[s.k] === s.answer.trim()).length / rows.length : 0
     } else if (type === 'shortanswer' || type === 'numerical') {
       answered = typed.trim() !== ''
-      const hit = q.answers.find((a) => (type === 'numerical' ? a.rt.text.trim() === '*' || Math.abs(toNumber(typed) - toNumber(a.rt.text)) <= tolerance(a) + 1e-9 : textMatches(a.rt.text, typed)))
-      fraction = answered ? (parseFloat(hit?.fraction ?? '0') || 0) / 100 : 0
+      if (type === 'numerical') fraction = answered ? gradeNumerical(q, typed, unit).fraction : 0
+      else fraction = answered ? (parseFloat(q.answers.find((a) => textMatches(a.rt.text, typed))?.fraction ?? '0') || 0) / 100 : 0
     } else if (type === 'cloze' && inline.current) {
       const root = inline.current
       let got = 0
@@ -174,6 +172,15 @@ function Attempt({ q, number, onRetry }: { q: Question; number: number; onRetry:
   const combined = !done || f === null ? undefined : getText(q, f >= 0.999 ? 'correctfeedback' : f > 0 ? 'partiallycorrectfeedback' : 'incorrectfeedback')
   const rightAnswers = q.answers.filter((a) => (parseFloat(a.fraction) || 0) > 0)
   const answerLabel = (a: Answer) => (type === 'truefalse' ? (a.rt.text.trim() === 'true' ? 'Vrai' : 'Faux') : plain(a.rt.text))
+  // Question numérique dont l'unité se choisit dans une liste.
+  const unitSelect = type === 'numerical' && unitChoice(q) && (
+    <select className="cz" value={unit} disabled={done} onChange={(e) => setUnit(e.target.value)}>
+      <option value="">Unité…</option>
+      {getUnits(q).map((u) => (
+        <option key={u.name}>{u.name}</option>
+      ))}
+    </select>
+  )
   const toggle = (a: Answer) => {
     if (done) return
     const next = new Set(type === 'truefalse' || single ? [] : picked)
@@ -261,7 +268,9 @@ function Attempt({ q, number, onRetry }: { q: Question; number: number; onRetry:
           {(type === 'shortanswer' || type === 'numerical') && (
             <div className="stu-typed">
               <label>
-                Réponse : <input className={done ? (f! >= 0.999 ? 'cz-ok' : f! > 0 ? 'cz-part' : 'cz-bad') : ''} value={typed} disabled={done} onChange={(e) => setTyped(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && check()} />
+                Réponse : {unitSelect && getProp(q, 'unitsleft') === '1' && unitSelect}
+                <input className={done ? (f! >= 0.999 ? 'cz-ok' : f! > 0 ? 'cz-part' : 'cz-bad') : ''} value={typed} disabled={done} onChange={(e) => setTyped(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && check()} />
+                {unitSelect && getProp(q, 'unitsleft') !== '1' && unitSelect}
               </label>
             </div>
           )}

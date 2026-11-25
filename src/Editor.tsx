@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
+import { type DragBox, dragBoxXml, dragBoxes, dropZones } from './dragbox'
 import { fileUrl, readAsBase64, registerFile, renderRt, unresolve } from './files'
 import { lintQuestion } from './lint'
 import { type Answer, type Category, type Question, type RichText, emptyRt, getProp, getText, setProp, setText, typeLabel, uid } from './model'
 import { Issues, QuestionPreview } from './Preview'
+import { type Unit, getUnits, isUnits, setUnitMode, setUnits, unitMode } from './units'
 
 // ---- Éditeur de texte enrichi (HTML conservé tel quel tant qu'on n'y touche pas) ----
 
@@ -160,6 +162,34 @@ export function QuestionEditor({ question, categories, onSave, onCancel, onDirty
         else if (single || q.type === 'truefalse') a.fraction = '0'
       }
     })
+  // ---- Glisser-déposer sur texte : choix à déposer ----
+  const boxes = d.type === 'ddwtos' ? dragBoxes(d) : []
+  const zones = d.type === 'ddwtos' ? dropZones(getText(d, 'questiontext')?.text ?? '') : []
+  const setBox = (i: number, box: DragBox) => mut((q) => (q.extra[i] = dragBoxXml(box)))
+  const addBox = () =>
+    mut((q) => {
+      const last = dragBoxes(q).pop()
+      q.extra.splice(last ? last.i + 1 : q.extra.length, 0, dragBoxXml({ text: '', group: last?.box.group ?? '1', infinite: false }))
+    })
+  /** Retire un choix inutilisé et décale les numéros [[n]] qui le suivent dans l'énoncé. */
+  const removeBox = (i: number, n: number) =>
+    mut((q) => {
+      q.extra.splice(i, 1)
+      const rt = getText(q, 'questiontext')
+      if (rt) setText(q, 'questiontext', { ...rt, text: rt.text.replace(/\[\[(\d+)\]\]/g, (m, k) => (+k > n ? `[[${+k - 1}]]` : m)) })
+    })
+  /** Réglage que l'éditeur ne sait pas encore modifier (conservé tel quel). */
+  // ---- Question numérique : unités ----
+  const units = d.type === 'numerical' ? getUnits(d) : []
+  const uMode = d.type === 'numerical' ? unitMode(d) : 'none'
+  const editUnits = (fn: (u: Unit[]) => void) =>
+    mut((q) => {
+      const u = getUnits(q)
+      fn(u)
+      setUnits(q, u)
+    })
+  const locked = d.extra.some((x) => !(d.type === 'ddwtos' && /^<dragbox[\s>]/.test(x)) && !(d.type === 'numerical' && isUnits(x))) || d.answers.some((a) => a.extra.some((x) => !TOL.test(x)))
+
   const positiveSum = d.answers.map((a) => parseFloat(a.fraction) || 0).filter((f) => f > 0).reduce((a, b) => a + b, 0)
 
   return (
@@ -207,6 +237,49 @@ export function QuestionEditor({ question, categories, onSave, onCancel, onDirty
             Syntaxe des trous : <code>{'{1:MULTICHOICE:=bonne réponse#rétroaction~mauvaise~%50%partielle}'}</code>, <code>{'{1:SHORTANSWER:=réponse}'}</code>,{' '}
             <code>{'{1:NUMERICAL:=9.81:0.1}'}</code>. Le chiffre initial est le poids du trou ; l’aperçu à droite se met à jour en direct.
           </p>
+        )}
+
+        {d.type === 'ddwtos' && (
+          <div className="field">
+            <div className="label">Choix à déposer</div>
+            <p className="hint">
+              Dans l’énoncé, <code>[[1]]</code> marque la zone qui attend le choix 1, <code>[[2]]</code> le choix 2, etc. Un choix sans zone sert de distracteur. Un choix ne se dépose que dans les zones de son groupe (une couleur par groupe dans StudiUM).
+            </p>
+            {boxes.map(({ i, box }, k) => {
+              const n = k + 1
+              const used = zones.includes(n)
+              return (
+                <div className="drag-row" key={i}>
+                  <code className={used ? 'used' : ''} title={used ? 'Bonne réponse de la zone [[' + n + ']]' : 'Distracteur : aucune zone [[' + n + ']] dans l’énoncé'}>
+                    [[{n}]]
+                  </code>
+                  <input className="grow" value={box.text} placeholder="Texte du choix" onChange={(e) => setBox(i, { ...box, text: e.target.value })} />
+                  <select value={box.group} title="Groupe" onChange={(e) => setBox(i, { ...box, group: e.target.value })}>
+                    {[...new Set(['1', '2', '3', '4', '5', '6', '7', '8', box.group])].map((g) => (
+                      <option key={g} value={g}>
+                        Groupe {g}
+                      </option>
+                    ))}
+                  </select>
+                  <label className="check" title="Le choix reste disponible après avoir été déposé : il peut servir dans plusieurs zones">
+                    <input type="checkbox" checked={box.infinite} onChange={(e) => setBox(i, { ...box, infinite: e.target.checked })} />
+                    Réutilisable
+                  </label>
+                  <button className="danger" disabled={used} title={used ? 'Retirez d’abord [[' + n + ']] de l’énoncé' : 'Supprimer ce choix (les numéros suivants sont décalés dans l’énoncé)'} onClick={() => removeBox(i, n)}>
+                    ✕
+                  </button>
+                </div>
+              )
+            })}
+            {zones.some((z) => z < 1 || z > boxes.length) && (
+              <ul className="issues">
+                <li className="error">L’énoncé contient {[...new Set(zones.filter((z) => z < 1 || z > boxes.length))].map((z) => `[[${z}]]`).join(', ')} sans choix correspondant.</li>
+              </ul>
+            )}
+            <div>
+              <button onClick={addBox}>+ Ajouter un choix</button>
+            </div>
+          </div>
         )}
 
         {d.type === 'multichoice' && (
@@ -277,6 +350,89 @@ export function QuestionEditor({ question, categories, onSave, onCancel, onDirty
           </div>
         )}
 
+        {d.type === 'numerical' && (
+          <div className="field">
+            <div className="label">Unités</div>
+            <div className="row">
+              <label>
+                Gestion des unités
+                <select value={uMode} onChange={(e) => mut((q) => setUnitMode(q, e.target.value as 'none' | 'optional' | 'graded'))}>
+                  <option value="none">Pas d’unité : le nombre seul</option>
+                  <option value="optional">Unité facultative, non notée</option>
+                  <option value="graded">Unité exigée et notée</option>
+                </select>
+              </label>
+              {uMode === 'graded' && (
+                <>
+                  <label title="Part de la note retirée quand l’unité est absente (entre 0 et 1)">
+                    Pénalité d’unité
+                    <input style={{ width: 80 }} value={getProp(d, 'unitpenalty') ?? ''} onChange={(e) => mut((q) => setProp(q, 'unitpenalty', e.target.value))} />
+                  </label>
+                  <label>
+                    Pénalité calculée sur
+                    <select value={getProp(d, 'unitgradingtype') === '2' ? '2' : '1'} onChange={(e) => mut((q) => setProp(q, 'unitgradingtype', e.target.value))}>
+                      <option value="1">la note obtenue</option>
+                      <option value="2">la note de la question</option>
+                    </select>
+                  </label>
+                  <label>
+                    Saisie de l’unité
+                    <select value={getProp(d, 'showunits') ?? '0'} onChange={(e) => mut((q) => setProp(q, 'showunits', e.target.value))}>
+                      <option value="0">tapée après le nombre</option>
+                      <option value="1">boutons radio</option>
+                      <option value="2">menu déroulant</option>
+                    </select>
+                  </label>
+                </>
+              )}
+              {uMode !== 'none' && (
+                <label>
+                  Position de l’unité
+                  <select value={getProp(d, 'unitsleft') === '1' ? '1' : '0'} onChange={(e) => mut((q) => setProp(q, 'unitsleft', e.target.value))}>
+                    <option value="0">à droite (9,81 m)</option>
+                    <option value="1">à gauche ($ 9,81)</option>
+                  </select>
+                </label>
+              )}
+            </div>
+            {uMode !== 'none' && (
+              <>
+                <p className="hint">
+                  Les réponses acceptées ci-dessus sont exprimées dans l’unité de multiplicateur 1. Une autre unité convertit la réponse : pour une bonne réponse de 5 m, l’unité cm avec le multiplicateur 100 fait accepter « 500 cm ».
+                </p>
+                {units.map((u, i) => (
+                  <div className="drag-row" key={i}>
+                    <input style={{ width: 130 }} value={u.name} placeholder="Unité (ex. m)" onChange={(e) => editUnits((all) => (all[i].name = e.target.value))} />
+                    <label className="check">
+                      Multiplicateur
+                      <input style={{ width: 100 }} value={u.multiplier} onChange={(e) => editUnits((all) => (all[i].multiplier = e.target.value))} />
+                    </label>
+                    <span className="grow" />
+                    <button className="danger" title="Supprimer cette unité" onClick={() => editUnits((all) => all.splice(i, 1))}>
+                      ✕
+                    </button>
+                  </div>
+                ))}
+                {(() => {
+                  const bad = [!units.length && 'Aucune unité définie.', units.some((u) => !u.name.trim()) && 'Une unité n’a pas de nom.', units.some((u) => !(parseFloat(u.multiplier) > 0)) && 'Un multiplicateur doit être un nombre positif.', new Set(units.map((u) => u.name.trim())).size < units.length && 'Deux unités portent le même nom.'].filter(Boolean)
+                  return bad.length > 0 && (
+                    <ul className="issues">
+                      {bad.map((b) => (
+                        <li key={String(b)} className="error">
+                          {b}
+                        </li>
+                      ))}
+                    </ul>
+                  )
+                })()}
+                <div>
+                  <button onClick={() => editUnits((all) => all.push({ name: '', multiplier: all.length ? '' : '1' }))}>+ Ajouter une unité</button>
+                </div>
+              </>
+            )}
+          </div>
+        )}
+
         {d.type === 'truefalse' && (
           <div className="field">
             <div className="label">Bonne réponse</div>
@@ -324,7 +480,7 @@ export function QuestionEditor({ question, categories, onSave, onCancel, onDirty
             {text('incorrectfeedback', 'Réponse incorrecte', true)}
           </details>
         )}
-        {(d.extra.length > 0 || d.answers.some((a) => a.extra.length > 0)) && <p className="hint">Cette question contient des réglages avancés non modifiables ici ; ils sont conservés tels quels à l’export.</p>}
+        {locked && <p className="hint">Cette question contient des réglages avancés non modifiables ici ; ils sont conservés tels quels à l’export.</p>}
       </div>
 
       <div className="editor-side">

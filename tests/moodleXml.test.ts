@@ -180,3 +180,67 @@ describe('formules mathématiques', () => {
     expect(renderMath('<p>Aucune formule</p>')).toBe('<p>Aucune formule</p>')
   })
 })
+
+describe('glisser-déposer sur texte', () => {
+  it('lit et réécrit les choix à déposer', async () => {
+    const { dragBoxXml, dragBoxes, dropZones, parseDragBox } = await import('../src/dragbox')
+    const xml = `<quiz><question type="ddwtos"><name><text>GD</text></name><questiontext format="html"><text><![CDATA[<p>Le [[1]] fléchit le [[2]].</p>]]></text></questiontext>
+    <shuffleanswers>1</shuffleanswers>
+    <dragbox>
+      <text>biceps &amp; co</text>
+      <group>1</group>
+    </dragbox>
+    <dragbox>
+      <text>coude</text>
+      <group>2</group>
+      <infinite/>
+    </dragbox></question></quiz>`
+    const q = parseMoodleXml(xml, 't').questions[0]
+    const boxes = dragBoxes(q)
+    expect(boxes.map((b) => b.box)).toEqual([
+      { text: 'biceps & co', group: '1', infinite: false },
+      { text: 'coude', group: '2', infinite: true },
+    ])
+    expect(dropZones('<p>Le [[1]] fléchit le [[2]].</p>')).toEqual([1, 2])
+    // Un choix réécrit sans changement redonne le même XML : l'export reste identique.
+    for (const { i, box } of boxes) expect(dragBoxXml(box)).toBe(q.extra[i])
+    expect(parseDragBox(dragBoxXml({ text: 'a < b', group: '3', infinite: true }))).toEqual({ text: 'a < b', group: '3', infinite: true })
+  })
+})
+
+describe('unités des questions numériques', () => {
+  it('lit, réécrit et note avec les unités', async () => {
+    const { getUnits, gradeNumerical, setUnitMode, setUnits, unitMode, unitsXml } = await import('../src/units')
+    const xml = `<quiz><question type="numerical"><name><text>N</text></name><questiontext format="html"><text>d ?</text></questiontext>
+    <answer fraction="100" format="moodle_auto_format"><text>5</text><tolerance>0.1</tolerance></answer>
+    <unitgradingtype>1</unitgradingtype><unitpenalty>0.5000000</unitpenalty><showunits>0</showunits><unitsleft>0</unitsleft>
+<units>
+  <unit>
+    <multiplier>1</multiplier>
+    <unit_name>m</unit_name>
+  </unit>
+  <unit>
+    <multiplier>100</multiplier>
+    <unit_name>cm</unit_name>
+  </unit>
+</units></question></quiz>`
+    const q = parseMoodleXml(xml, 't').questions[0]
+    expect(getUnits(q)).toEqual([{ name: 'm', multiplier: '1' }, { name: 'cm', multiplier: '100' }])
+    // Réécrites sans changement, les unités redonnent le même XML.
+    expect(unitsXml(getUnits(q))).toBe(q.extra.find((x) => x.startsWith('<units')))
+    expect(unitMode(q)).toBe('graded')
+    expect(gradeNumerical(q, '5 m').fraction).toBe(1)
+    expect(gradeNumerical(q, '505cm').fraction).toBe(1)
+    expect(gradeNumerical(q, '5,05').fraction).toBe(0.5) // unité absente : pénalité
+    expect(gradeNumerical(q, '5 km').fraction).toBe(0) // unité inconnue
+    expect(gradeNumerical(q, '7 m').fraction).toBe(0)
+    setUnitMode(q, 'none')
+    expect(unitMode(q)).toBe('none')
+    expect(gradeNumerical(q, '5').fraction).toBe(1)
+    setUnitMode(q, 'optional')
+    expect(gradeNumerical(q, '5').fraction).toBe(1)
+    expect(gradeNumerical(q, '500 cm').fraction).toBe(1)
+    setUnits(q, [])
+    expect(q.extra.some((x) => x.startsWith('<units'))).toBe(false)
+  })
+})
