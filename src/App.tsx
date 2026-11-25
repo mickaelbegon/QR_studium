@@ -32,6 +32,11 @@ const fileSafe = (s: string) => s.replace(/[^\p{L}\p{N}_-]+/gu, '_').slice(0, 60
 const AUTO_KEY = 'qr.auto'
 const FRESH_KEY = 'qr.fresh'
 // Une case à cocher ne bloque pas les raccourcis clavier.
+// Largeurs des colonnes, réglables à la souris et mémorisées d'un lancement à l'autre.
+const COLS_KEY = 'qr.cols'
+const COLS = { side: { def: 240, min: 130, max: 520 }, list: { def: 380, min: 220, max: 900 }, claude: { def: 440, min: 320, max: 1000 } }
+export type Col = keyof typeof COLS
+const defaultCols = (): Record<Col, number> => ({ side: COLS.side.def, list: COLS.list.def, claude: COLS.claude.def })
 const isTyping = (t: EventTarget | null) => t instanceof HTMLElement && !(t instanceof HTMLInputElement && t.type === 'checkbox') && (t.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(t.tagName))
 
 export default function App() {
@@ -64,6 +69,60 @@ export default function App() {
   const lastPick = useRef<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [claude, setClaude] = useState(false)
+  const [cols, setCols] = useState<Record<Col, number>>(() => {
+    try {
+      return { ...defaultCols(), ...JSON.parse(localStorage.getItem(COLS_KEY) ?? '{}') }
+    } catch {
+      return defaultCols()
+    }
+  })
+  useEffect(() => {
+    for (const k of Object.keys(COLS) as Col[]) document.documentElement.style.setProperty('--w-' + k, cols[k] + 'px')
+  }, [cols])
+  const keepCols = (c: Record<Col, number>) => {
+    try {
+      localStorage.setItem(COLS_KEY, JSON.stringify(c))
+    } catch {
+      /* largeurs non mémorisées */
+    }
+  }
+  /** Poignée d'une colonne : glisser pour élargir ou rétrécir, double-clic pour la largeur d'origine. */
+  const grip = (col: Col, dir: 1 | -1) => ({
+    title: 'Glisser pour élargir ou rétrécir · double-clic : largeur d’origine',
+    onDoubleClick: () => {
+      const next = { ...cols, [col]: COLS[col].def }
+      setCols(next)
+      keepCols(next)
+    },
+    onPointerDown: (e: React.PointerEvent<HTMLDivElement>) => {
+      e.preventDefault()
+      const handle = e.currentTarget
+      const x0 = e.clientX
+      const w0 = cols[col]
+      let last = cols
+      handle.setPointerCapture(e.pointerId)
+      handle.classList.add('drag')
+      document.body.classList.add('resizing')
+      const move = (ev: PointerEvent) => {
+        // La dernière colonne garde toujours une largeur utilisable.
+        const room = window.innerWidth - 260 - (col === 'claude' ? 300 : (claude ? cols.claude : 0) + (col === 'side' ? cols.list : cols.side))
+        const w = Math.round(Math.max(COLS[col].min, Math.min(COLS[col].max, room, w0 + dir * (ev.clientX - x0))))
+        last = { ...cols, [col]: w }
+        setCols(last)
+      }
+      const up = () => {
+        handle.removeEventListener('pointermove', move)
+        handle.removeEventListener('pointerup', up)
+        handle.removeEventListener('pointercancel', up)
+        handle.classList.remove('drag')
+        document.body.classList.remove('resizing')
+        keepCols(last)
+      }
+      handle.addEventListener('pointermove', move)
+      handle.addEventListener('pointerup', up)
+      handle.addEventListener('pointercancel', up)
+    },
+  })
   const fileInput = useRef<HTMLInputElement>(null)
   const searchInput = useRef<HTMLInputElement>(null)
 
@@ -596,6 +655,8 @@ export default function App() {
           </div>
         ) : (
           <main className="layout">
+            <div className="col-grip g-side" {...grip('side', 1)} />
+            <div className="col-grip g-list" {...grip('list', 1)} />
             <aside className="sidebar">
               <div className="side-title">Catégories</div>
               <button className={'cat' + (cat === null ? ' active' : '')} onClick={() => setCat(null)}>
@@ -825,7 +886,7 @@ export default function App() {
           </div>
         )}
       </div>
-      <ClaudePanel open={claude} onClose={() => setClaude(false)} current={view === 'bank' ? current : null} onAdd={addProposal} onReplace={replaceWithProposal} />
+      <ClaudePanel grip={grip('claude', -1)} open={claude} onClose={() => setClaude(false)} current={view === 'bank' ? current : null} onAdd={addProposal} onReplace={replaceWithProposal} />
       {print && <PrintSheet exam={print.exam} questions={examQuestions(print.exam)} corrige={print.corrige} />}
     </>
   )

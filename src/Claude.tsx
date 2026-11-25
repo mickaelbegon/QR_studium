@@ -83,7 +83,7 @@ const pretty = (t: string) => renderMath(DOMPurify.sanitize(esc(t).replace(/\*\*
 
 const QUICK = ['Améliore la clarté de l’énoncé', 'Propose de meilleurs distracteurs', 'Rédige les rétroactions', 'Crée une variante de même difficulté', 'Vérifie l’exactitude de la clé de correction']
 
-export function ClaudePanel({ open, onClose, current, onAdd, onReplace }: { open: boolean; onClose: () => void; current: Question | null; onAdd: (q: Question) => void; onReplace: (q: Question) => void }) {
+export function ClaudePanel({ open, onClose, current, onAdd, onReplace, grip }: { grip: React.HTMLAttributes<HTMLDivElement>; open: boolean; onClose: () => void; current: Question | null; onAdd: (q: Question) => void; onReplace: (q: Question) => void }) {
   const [msgs, setMsgs] = useState<Msg[]>([])
   const [input, setInput] = useState('')
   const [attach, setAttach] = useState(true)
@@ -150,6 +150,7 @@ export function ClaudePanel({ open, onClose, current, onAdd, onReplace }: { open
 
   return (
     <aside className="claude" hidden={!open}>
+      <div className="col-grip claude-grip" {...grip} />
       <div className="claude-head">
         <strong>Claude</strong>
         <span className="claude-note grow">{status?.mode === 'api' ? `API Anthropic · ${status.model}` : status?.mode === 'cli' ? 'via Claude Code (votre abonnement)' : ''}</span>
