@@ -14,7 +14,7 @@ export function RichTextEditor({ value, onChange, compact, placeholder }: { valu
   val.current = value
 
   useEffect(() => {
-    if (!source && el.current) el.current.innerHTML = renderRt(val.current)
+    if (!source && el.current) el.current.innerHTML = renderRt(val.current, { math: false })
   }, [source])
 
   const emit = () => {

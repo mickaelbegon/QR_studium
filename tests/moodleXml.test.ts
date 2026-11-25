@@ -168,3 +168,15 @@ describe.skipIf(!privFiles.length)('Banques privées (data_prive/)', () => {
     })
   }
 })
+
+describe('formules mathématiques', () => {
+  it('rend les délimiteurs de Moodle et laisse le reste intact', async () => {
+    const { renderMath } = await import('../src/math')
+    const html = renderMath('<p>Si \\(F = m \\cdot a\\) et $$\\frac{1}{2} &lt; x$$ alors 5 $ et 3 $.</p><select><option>\\(x\\)</option></select>')
+    expect(html.match(/class="katex"/g)?.length).toBe(2)
+    expect(html).toContain('katex-display')
+    expect(html).toContain('5 $ et 3 $')
+    expect(html).toContain('<option>\\(x\\)</option>')
+    expect(renderMath('<p>Aucune formule</p>')).toBe('<p>Aucune formule</p>')
+  })
+})

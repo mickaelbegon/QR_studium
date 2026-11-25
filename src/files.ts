@@ -2,6 +2,7 @@
 import DOMPurify from 'dompurify'
 import { renderCloze, renderClozeInputs } from './cloze'
 import * as db from './db'
+import { renderMath } from './math'
 import { type FileRef, type RichText, pluginUrl, replaceFileRefs } from './model'
 import { contentKey } from './moodleXml'
 
@@ -52,11 +53,13 @@ export function fileUrl(f: FileRef): string {
 const escapeHtml = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 
 /** HTML affichable d'un texte de question : nettoyé (pas de script) et images résolues. */
-export function renderRt(rt: RichText | undefined, o: { cloze?: boolean; showAnswers?: boolean; interactive?: boolean } = {}): string {
+export function renderRt(rt: RichText | undefined, o: { cloze?: boolean; showAnswers?: boolean; interactive?: boolean; math?: boolean } = {}): string {
   if (!rt || !rt.text) return ''
   let html = rt.format === 'plain_text' ? escapeHtml(rt.text).replace(/\n/g, '<br>') : rt.text
   if (o.cloze) html = o.interactive ? renderClozeInputs(html) : renderCloze(html, o.showAnswers ?? true)
   html = DOMPurify.sanitize(html)
+  // Les formules sont rendues après le nettoyage ; l'éditeur, lui, garde le TeX tel quel (math: false).
+  if (o.math !== false) html = renderMath(html)
   return replaceFileRefs(html, rt, fileUrl)
 }
 

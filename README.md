@@ -82,3 +82,18 @@ npm test          # tests de lecture/écriture (et de vos fichiers dans data_pri
 npm run typecheck
 npm run build
 ```
+
+## Formules mathématiques
+
+Les formules TeX sont affichées comme dans StudiUM, avec les mêmes délimiteurs : `\( ... \)` dans le texte, `\[ ... \]` ou `$$ ... $$` sur une ligne à part. Dans l'éditeur, on tape le TeX tel quel ; l'aperçu à côté montre le rendu. Le fichier exporté n'est pas modifié.
+
+## Assistant Claude
+
+Le bouton **Claude** (en haut) ouvre un panneau de dialogue pour générer de nouvelles questions ou améliorer la question sélectionnée. Chaque proposition s'affiche en aperçu, avec **Ajouter à la banque** (comme brouillon) ou **Remplacer la question sélectionnée** (l'ancienne version reste dans l'historique).
+
+Deux façons de le faire fonctionner, sans rien configurer dans l'application :
+
+- **Claude Code installé et connecté** sur l'ordinateur : l'assistant passe par lui, avec votre abonnement. C'est le mode par défaut.
+- **Clé d'API Anthropic** : collez-la dans `data_prive/cle_claude.txt` (dossier jamais commité) ou dans la variable `ANTHROPIC_API_KEY`. La clé a priorité si elle existe. Le modèle se change avec la variable `QR_CLAUDE_MODEL` (par défaut `claude-opus-5-5`).
+
+Confidentialité : seuls vos messages et le texte de la question jointe (case « Joindre la question sélectionnée ») sont envoyés à Anthropic. Les images et le reste de la banque ne quittent pas l'ordinateur.

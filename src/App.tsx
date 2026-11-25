@@ -11,6 +11,7 @@ import { type Report, type Suggestion, backupNotes, correctedCategory, exportRep
 import { DIRECTIONS, PERTINENCES, ReportView, ReviewBox, directionClass } from './ReviewPanel'
 import { useBank } from './store'
 import { StudentView } from './Student'
+import { ClaudePanel } from './Claude'
 
 function download(name: string, xml: string, type = 'application/xml') {
   const url = URL.createObjectURL(new Blob([xml], { type }))
@@ -62,6 +63,7 @@ export default function App() {
   const [picked, setPicked] = useState<Set<string>>(new Set())
   const lastPick = useRef<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const [claude, setClaude] = useState(false)
   const fileInput = useRef<HTMLInputElement>(null)
   const searchInput = useRef<HTMLInputElement>(null)
 
@@ -381,6 +383,29 @@ export default function App() {
     setSel(q.id)
     setEditing(true)
   }
+  // ---- Propositions de l'assistant Claude ----
+  const addProposal = async (p: Question) => {
+    if (!leaveEdit()) return
+    const category = current?.category ?? categories[0]?.path ?? ''
+    const q = await bank.saveQuestion({ ...p, id: uid(), category, meta: { ...p.meta, status: 'brouillon', source: 'Claude', order: bank.nextOrder() } })
+    setCat(null)
+    setQuery('')
+    setFType('')
+    setFStatus('')
+    setFIssues(false)
+    setFDir('')
+    setFPert('')
+    setView('bank')
+    setSel(q.id)
+    say('Proposition ajoutée à la banque comme brouillon' + (category ? ` dans « ${categoryLabel(category)} ».` : '.'))
+  }
+  const replaceWithProposal = async (p: Question) => {
+    if (!current || !leaveEdit()) return
+    // La question garde son identité : catégorie, étiquettes, notes et place dans les examens.
+    await bank.saveQuestion({ ...p, id: current.id, category: current.category, tags: current.tags, hasTags: current.hasTags, meta: current.meta }, 'Remplacée par une proposition de Claude')
+    say('Question remplacée. L’ancienne version reste dans l’historique.')
+  }
+
   const toggleExam = async (q: Question) => {
     let e = exam
     if (!e) {
@@ -435,7 +460,7 @@ export default function App() {
   return (
     <>
       <div
-        className="app"
+        className={'app' + (claude ? ' with-claude' : '')}
         onDragOver={(e) => e.preventDefault()}
         onDrop={(e) => {
           e.preventDefault()
@@ -481,6 +506,9 @@ export default function App() {
               Sauvegarde impossible
             </span>
           )}
+          <button className={claude ? 'on-claude' : ''} onClick={() => setClaude(!claude)} title="Demander à Claude de générer ou d’améliorer des questions">
+            Claude
+          </button>
           <button onClick={() => fileInput.current?.click()} disabled={busy}>
             {busy ? 'Import en cours…' : 'Importer (XML, JSON)'}
           </button>
@@ -564,7 +592,7 @@ export default function App() {
             <button className="primary" onClick={() => fileInput.current?.click()}>
               Importer un fichier Moodle XML
             </button>
-            <p className="hint">Les questions restent sur cet ordinateur (stockage local du navigateur). Rien n’est envoyé sur Internet.</p>
+            <p className="hint">Les questions restent sur cet ordinateur (stockage local du navigateur). Rien n’est envoyé sur Internet, sauf ce que vous choisissez d’envoyer à l’assistant Claude.</p>
           </div>
         ) : (
           <main className="layout">
@@ -797,6 +825,7 @@ export default function App() {
           </div>
         )}
       </div>
+      <ClaudePanel open={claude} onClose={() => setClaude(false)} current={view === 'bank' ? current : null} onAdd={addProposal} onReplace={replaceWithProposal} />
       {print && <PrintSheet exam={print.exam} questions={examQuestions(print.exam)} corrige={print.corrige} />}
     </>
   )
