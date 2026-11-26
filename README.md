@@ -9,7 +9,8 @@ envoyé sur Internet, sauf ce que vous choisissez d'envoyer à l'assistant Claud
 
 ## Démarrer
 
-Il faut [Node.js](https://nodejs.org) (version 20 ou plus récente).
+Il faut [Node.js](https://nodejs.org) en version LTS récente (22 ou plus ; au minimum 20.19).
+Voir « Installer sur un autre ordinateur » plus bas pour une installation complète.
 
 ```
 npm install
@@ -98,12 +99,24 @@ Sur une note de révision, la pastille « À corriger » ou « À améliorer » 
 « J'ai corrigé cette question » passe la direction à « Garder », efface le problème et range la
 question dans la catégorie de sa pertinence.
 
+## Niveau cognitif
+
+Chaque question peut porter une étiquette de niveau, qui dit ce que l'étudiant doit faire pour
+répondre : `niveau-sait`, `niveau-comprend`, `niveau-sait-comment`, `niveau-applique` ou
+`niveau-analyse`. Ce sont de vraies étiquettes Moodle, exportées vers StudiUM. Dans l'application :
+pastille dans la liste, filtre « Niveau », menu sur la question, et répartition par niveau dans le
+résumé d'un examen. Un fichier JSON `[{cle, niveau}]` s'importe comme les autres.
+
 ## Examens
 
 - Sélection des questions, ordre, total des points, export XML, impression (copie et corrigé).
 - **Difficulté et temps** : difficulté moyenne (simple, et pondérée par les points), temps total
   estimé et nombre de questions par niveau. L'en-tête rappelle ces deux valeurs pour l'examen en
   cours pendant la sélection des questions.
+- **Composition** : un diagramme circulaire montre la répartition des questions de l'examen par
+  niveau cognitif, type, thème ou difficulté, avec le nombre et le pourcentage de chaque part.
+- **Niveau cognitif** : nombre de questions par niveau (sait, comprend, sait comment, applique,
+  analyse).
 
 La difficulté et le temps se saisissent aussi à la main sur chaque question. Ils restent dans
 l'application et dans la sauvegarde des notes : Moodle n'a pas de champ pour eux.
@@ -153,6 +166,34 @@ de `data_prive/` ne servent que s'il n'y a aucune sauvegarde, ou après « Vider
 Les données de l'application vivent dans le navigateur utilisé : changer de navigateur ou
 effacer ses données de site vide la banque locale. Exportez régulièrement toute la banque.
 
+## Installer sur un autre ordinateur
+
+1. **Installer [Node.js](https://nodejs.org)**, version LTS (22 ou plus ; au minimum 20.19). C'est
+   le seul logiciel obligatoire ; `npm` est installé avec lui.
+2. **Récupérer l'application** : avec [Git](https://git-scm.com), `git clone` du dépôt (privé : il
+   faut un compte GitHub qui y a accès) ; ou, sans Git, le bouton *Code › Download ZIP* de GitHub ;
+   ou encore copier le dossier depuis l'autre ordinateur, sans son sous-dossier `node_modules`.
+3. **Lancer** : double-clic sur `lancer.bat` sous Windows, ou `npm install` puis `npm start` dans le
+   dossier. Le premier lancement télécharge les dépendances (connexion Internet nécessaire, une ou
+   deux minutes) ; les suivants fonctionnent hors ligne, sauf l'assistant Claude.
+4. **Copier vos données** : le dossier `data_prive/` n'est pas dans le dépôt. Copiez-le à la main
+   (clé USB, dossier partagé) à la racine de l'application, avec son sous-dossier `sauvegardes/`.
+   Au premier lancement, la banque étant vide dans le nouveau navigateur, la sauvegarde la plus
+   récente est restaurée : questions, étiquettes, notes de révision, statuts, difficulté, temps et
+   examens. L'historique des versions et les propositions de distracteurs ne suivent pas.
+
+Facultatif :
+
+- **Assistant Claude** : installer [Claude Code](https://claude.com/claude-code) et s'y connecter,
+  ou fournir une clé d'API Anthropic (voir « Assistant Claude »). Sans cela, tout le reste
+  fonctionne et seul le panneau Claude reste inactif.
+- **Python 3** : uniquement pour le script `scripts/nettoyer_mso.py`.
+
+Les deux ordinateurs ne se synchronisent pas : chacun a sa banque dans son navigateur. Pour
+reprendre sur l'un le travail fait sur l'autre, recopiez `data_prive/sauvegardes/` de l'ordinateur
+de départ vers celui d'arrivée, puis, sur ce dernier, menu **Exporter › Restaurer la dernière
+sauvegarde…**. Cette action remplace la banque du navigateur par la sauvegarde la plus récente.
+
 ## Développement
 
 ```
@@ -167,11 +208,3 @@ Outils en ligne de commande :
   Word / OnlyOffice d'une banque Moodle XML sans toucher au texte ni aux images.
 - `QR_XML=<fichier.xml> [QR_OUT=<rapport.txt>] npx vitest run tests/verifier.test.ts` : vérifie un
   fichier Moodle XML avec l'analyseur et les alertes de l'application.
-
-## Niveau cognitif
-
-Chaque question peut porter une étiquette de niveau, qui dit ce que l'étudiant doit faire pour
-répondre : `niveau-sait`, `niveau-comprend`, `niveau-sait-comment`, `niveau-applique` ou
-`niveau-analyse`. Ce sont de vraies étiquettes Moodle, exportées vers StudiUM. Dans l'application :
-pastille dans la liste, filtre « Niveau », menu sur la question, et répartition par niveau dans le
-résumé d'un examen. Un fichier JSON `[{cle, niveau}]` s'importe comme les autres.

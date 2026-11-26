@@ -399,6 +399,29 @@ export default function App() {
     }
   }
 
+  /** Remplace la banque du navigateur par la sauvegarde la plus récente de data_prive/sauvegardes. */
+  const restoreBackup = async () => {
+    if (!leaveEdit()) return
+    let saves: { name: string; mtime: number }[] = []
+    try {
+      saves = await (await fetch('/api/data-prive?dossier=sauvegardes')).json()
+    } catch {
+      /* serveur local arrêté */
+    }
+    const latest = saves.filter((f) => f.name.startsWith('banque-')).sort((x, y) => x.name.localeCompare(y.name)).pop()
+    if (!latest) return alert('Aucune sauvegarde trouvée dans data_prive/sauvegardes (ou l’application n’a pas été lancée avec lancer.bat).')
+    const when = new Date(latest.mtime).toLocaleString('fr-CA', { dateStyle: 'long', timeStyle: 'short' })
+    if (!confirm(`Remplacer la banque de ce navigateur (${questions.length} question${questions.length > 1 ? 's' : ''}) par la sauvegarde « ${latest.name} », écrite le ${when} ?\n\nQuestions, étiquettes, notes de révision, difficulté, temps et examens viennent de la sauvegarde. L’historique des versions et les propositions de distracteurs de ce navigateur sont perdus.`)) return
+    await bank.clear()
+    try {
+      localStorage.removeItem(FRESH_KEY)
+    } catch {
+      /* sans effet si le stockage est indisponible */
+    }
+    // Au rechargement, la banque est vide : la sauvegarde la plus récente est restaurée d'elle-même.
+    location.reload()
+  }
+
   /** Retire les paragraphes vides et les sauts de ligne en trop dans toutes les questions. */
   const tidyAll = async () => {
     if (!leaveEdit()) return
@@ -841,6 +864,9 @@ export default function App() {
                 Nettoyer la mise en forme…
               </button>
               <input ref={updateInput} type="file" accept=".xml" hidden onChange={(e) => updateFromFile(e.target.files?.[0]).then(() => (e.target.value = ''))} />
+              <button disabled={busy} title="Remplace la banque de ce navigateur par la sauvegarde la plus récente de data_prive/sauvegardes (pour reprendre le travail fait sur un autre ordinateur, par exemple)" onClick={restoreBackup}>
+                Restaurer la dernière sauvegarde…
+              </button>
               <button
                 className="danger"
                 onClick={() => {
