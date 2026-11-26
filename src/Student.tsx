@@ -117,7 +117,9 @@ function Attempt({ q, number, onRetry }: { q: Question; number: number; onRetry:
   const inlineHtml = useMemo(() => {
     if (type === 'cloze') return renderRt(text, { cloze: true, interactive: true })
     if (type !== 'ddwtos') return ''
-    const options = drags.map((d, k) => `<option value="${k + 1}">${plain(d).replace(/</g, '&lt;')}</option>`).join('')
+    // Les choix sont mélangés seulement si la question le demande (sinon : ordre de l'éditeur).
+    const order = drags.map((d, k) => ({ d, k }))
+    const options = (mix ? shuffle(order) : order).map(({ d, k }) => `<option value="${k + 1}">${plain(d).replace(/</g, '&lt;')}</option>`).join('')
     const rt: RichText = { ...(text ?? { text: '', files: [] }), text: (text?.text ?? '').replace(/\[\[(\d+)\]\]/g, (_, n) => `<select class="cz" data-dd="${n}"><option value=""></option>${options}</select>`) }
     return renderRt(rt)
   }, [])

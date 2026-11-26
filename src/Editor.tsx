@@ -276,9 +276,18 @@ export function QuestionEditor({ question, categories, onSave, onCancel, onDirty
                 <li className="error">L’énoncé contient {[...new Set(zones.filter((z) => z < 1 || z > boxes.length))].map((z) => `[[${z}]]`).join(', ')} sans choix correspondant.</li>
               </ul>
             )}
-            <div>
+            <div className="row">
               <button onClick={addBox}>+ Ajouter un choix</button>
+              <label className="check" title="Sans mélange, les choix sont présentés dans l’ordre des zones : la solution se lit dans l’ordre.">
+                <input type="checkbox" checked={['1', 'true'].includes(getProp(d, 'shuffleanswers') ?? '')} onChange={(e) => mut((q) => setProp(q, 'shuffleanswers', e.target.checked ? '1' : '0'))} />
+                Mélanger les choix à déposer
+              </label>
             </div>
+            {!['1', 'true'].includes(getProp(d, 'shuffleanswers') ?? '') && (
+              <ul className="issues">
+                <li className="warn">Mélange désactivé : l’étudiant voit les choix dans l’ordre ci-dessus, la solution se lit donc dans l’ordre.</li>
+              </ul>
+            )}
           </div>
         )}
 
