@@ -265,3 +265,14 @@ describe('propositions de distracteurs', () => {
     expect(applyProposal(q, { ...p, proposes: p.proposes.slice(0, 1) })).toBeNull()
   })
 })
+
+describe('catégories', () => {
+  it('réécrit les niveaux affichés en gardant le préfixe technique', async () => {
+    const { mapCategory, categoryLabel } = await import('../src/model')
+    const strip = (p: string) => mapCategory(p, (parts) => parts.map((x) => x.replace(/^Cours \d+(-\d+)? [–-] /u, '')))
+    expect(strip('$course$/top/KIN2024 – Banque/Cours 07-08 – Tissus et blessures/1 – Pertinence haute')).toBe('$course$/top/KIN2024 – Banque/Tissus et blessures/1 – Pertinence haute')
+    expect(strip('$course$/top/Cours 03 – Outils')).toBe('$course$/top/Outils')
+    expect(categoryLabel(mapCategory('$course$/top/A', () => ['Force//vitesse', 'B/C']))).toBe('Force//vitesse › B/C')
+    expect(strip('')).toBe('')
+  })
+})

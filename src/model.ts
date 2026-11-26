@@ -239,6 +239,20 @@ export function categoryParts(path: string): string[] {
   return parts.length ? parts : ['(Racine)']
 }
 
+/**
+ * Réécrit les niveaux affichés d'un chemin de catégorie (le préfixe technique `$module$/top` est conservé).
+ * Les niveaux vidés par `fn` disparaissent ; une barre oblique dans un nom est échappée en « // ».
+ */
+export function mapCategory(path: string, fn: (parts: string[]) => string[]): string {
+  if (!path) return path
+  const raw = splitCategory(path)
+  let skip = 0
+  if (/^\$\w+\$$/.test(raw[0] ?? '')) skip++
+  if (raw[skip] === 'top') skip++
+  const parts = fn(raw.slice(skip)).map((s) => s.trim()).filter(Boolean)
+  return [...raw.slice(0, skip), ...parts].map((s) => s.replace(/\//g, '//')).join('/')
+}
+
 export const SEP = '\u0001'
 export const categoryKey = (path: string): string => categoryParts(path).join(SEP)
 export const categoryLabel = (path: string): string => categoryParts(path).join(' › ')

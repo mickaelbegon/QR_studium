@@ -116,6 +116,34 @@ export function useBank() {
     return next.size
   }, [])
 
+  /**
+   * Renomme des catégories : `fn` donne le nouveau chemin de chaque chemin existant.
+   * Deux catégories qui aboutissent au même chemin fusionnent. Pas d'entrée d'historique : le contenu des questions ne change pas.
+   */
+  const renameCategories = useCallback(async (fn: (path: string) => string) => {
+    const changed = ref.current.questions.filter((q) => fn(q.category) !== q.category).map((q) => ({ ...q, category: fn(q.category) }))
+    const byId = new Map(changed.map((q) => [q.id, q]))
+    const cats = new Map<string, Category>()
+    for (const c of ref.current.categories) {
+      const path = fn(c.path)
+      if (!cats.has(path)) cats.set(path, { ...c, path })
+    }
+    const renamed = [...cats.keys()].filter((p) => !ref.current.categories.some((c) => c.path === p)).length
+    await db.putQuestions(changed)
+    await db.replaceCategories([...cats.values()])
+    setQuestions(ref.current.questions.map((q) => byId.get(q.id) ?? q))
+    setCategories([...cats.values()])
+    return { questions: changed.length, categories: renamed }
+  }, [])
+
+  /** Supprime des catégories (vides) de la liste. */
+  const removeCategories = useCallback(async (paths: string[]) => {
+    const gone = new Set(paths)
+    const cats = ref.current.categories.filter((c) => !gone.has(c.path))
+    await db.replaceCategories(cats)
+    setCategories(cats)
+  }, [])
+
   /** Rattache des propositions de distracteurs aux questions, par identifiant d'origine. */
   const importProposals = useCallback(async (proposals: Map<number, Question['meta']['proposal']>) => {
     const changed: Question[] = []
@@ -262,7 +290,7 @@ export function useBank() {
     setReports([])
   }, [])
 
-  return { questions, categories, exams, reports, loaded, nextOrder, importXml, importReport, importProposals, planUpdate, applyUpdate, saveQuestion, updateMeta, saveMeta, duplicate, removeQuestion, removeQuestions, restore, restoreExams, saveExam, removeExam, clear }
+  return { questions, categories, exams, reports, loaded, nextOrder, importXml, importReport, renameCategories, removeCategories, importProposals, planUpdate, applyUpdate, saveQuestion, updateMeta, saveMeta, duplicate, removeQuestion, removeQuestions, restore, restoreExams, saveExam, removeExam, clear }
 }
 
 export type Bank = ReturnType<typeof useBank>

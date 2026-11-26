@@ -62,6 +62,12 @@ export const deleteReport = (name: string) => del('reports', [name])
 export const putQuestions = (qs: Question[]) => putAll('questions', qs)
 export const deleteQuestions = (ids: string[]) => del('questions', ids)
 export const putCategories = (cs: Category[]) => putAll('categories', cs)
+/** Remplace toute la liste des catégories (renommages, suppressions). */
+export const replaceCategories = (cs: Category[]) =>
+  run(['categories'], 'readwrite', (tx) => {
+    tx.objectStore('categories').clear()
+    cs.forEach((c) => tx.objectStore('categories').put(c))
+  })
 export const putFiles = (fs: { hash: string; data: string }[]) => putAll('files', fs)
 export const putExam = (e: Exam) => putAll('exams', [e])
 export const deleteExam = (id: string) => del('exams', [id])

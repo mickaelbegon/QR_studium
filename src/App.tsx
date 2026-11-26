@@ -4,7 +4,7 @@ import { QuestionEditor } from './Editor'
 import { ExamsView, PrintSheet, points } from './Exams'
 import { fileData } from './files'
 import { type Issue, findDuplicates, lintQuestion, worst } from './lint'
-import { CREATABLE, type Exam, type Question, type Review, SEP, emptyReview, emptyRt, setProp, setText, uid, STATUS, type Status, type Version, categoryKey, categoryLabel, categoryParts, fold, getProp, getText, newQuestion, plain, qName, searchText, typeLabel, typeShort } from './model'
+import { CREATABLE, type Exam, type Question, type Review, SEP, emptyReview, emptyRt, setProp, setText, uid, STATUS, type Status, type Version, categoryKey, categoryLabel, categoryParts, mapCategory, fold, getProp, getText, newQuestion, plain, qName, searchText, typeLabel, typeShort } from './model'
 import { serializeBank } from './moodleXml'
 import { Issues, QuestionPreview } from './Preview'
 import { type Report, type Suggestion, backupNotes, correctedCategory, exportReport, sameTags, syncTags } from './report'
@@ -168,8 +168,82 @@ export default function App() {
       const parts = categoryParts(q.category)
       parts.forEach((_, i) => nodes.get(parts.slice(0, i + 1).join(SEP))!.count++)
     }
-    return [...nodes.values()].sort((a, b) => a.key.localeCompare(b.key, 'fr'))
+    // Ordre de l'arbre : celui de la banque (première question de chaque catégorie), pas l'ordre alphabétique,
+    // pour que les cours restent dans l'ordre même sans numéro dans leur nom. Les catégories vides vont à la fin.
+    const first = new Map<string, number>()
+    for (const q of questions) {
+      const parts = categoryParts(q.category)
+      parts.forEach((_, i) => {
+        const key = parts.slice(0, i + 1).join(SEP)
+        first.set(key, Math.min(first.get(key) ?? Infinity, q.meta.order))
+      })
+    }
+    const rank = (key: string) => {
+      const parts = key.split(SEP)
+      return parts.map((label, i) => ({ at: first.get(parts.slice(0, i + 1).join(SEP)) ?? Infinity, label }))
+    }
+    const ranks = new Map([...nodes.keys()].map((k) => [k, rank(k)]))
+    return [...nodes.values()].sort((a, b) => {
+      const ra = ranks.get(a.key)!
+      const rb = ranks.get(b.key)!
+      for (let i = 0; i < Math.min(ra.length, rb.length); i++) {
+        if (ra[i].label === rb[i].label) continue
+        return ra[i].at !== rb[i].at ? (ra[i].at < rb[i].at ? -1 : 1) : ra[i].label.localeCompare(rb[i].label, 'fr')
+      }
+      return ra.length - rb.length
+    })
   }, [questions, categories])
+
+  // ---- Catégories : renommer, remplacer dans les noms, supprimer les vides ----
+  const activeNode = tree.find((n) => n.key === cat) ?? null
+  const emptyPaths = useMemo(() => {
+    const used = new Set<string>()
+    for (const q of questions) {
+      const parts = categoryParts(q.category)
+      parts.forEach((_, i) => used.add(parts.slice(0, i + 1).join(SEP)))
+    }
+    return categories.map((c) => c.path).filter((p) => !used.has(categoryKey(p)))
+  }, [questions, categories])
+  const renameCategory = async () => {
+    if (!activeNode || !leaveEdit()) return
+    const depth = activeNode.depth
+    const prefix = activeNode.key.split(SEP)
+    const name = prompt('Nouveau nom de la catégorie :', activeNode.label)?.trim()
+    if (!name || name === activeNode.label) return
+    const under = (parts: string[]) => prefix.every((p, i) => parts[i] === p)
+    const r = await bank.renameCategories((path) => (path && under(categoryParts(path)) ? mapCategory(path, (parts) => parts.map((p, i) => (i === depth ? name : p))) : path))
+    setCat([...prefix.slice(0, depth), name].join(SEP))
+    say(`Catégorie renommée en « ${name} » (${r.questions} question${r.questions > 1 ? 's' : ''} concernée${r.questions > 1 ? 's' : ''}).`)
+  }
+  const replaceInCategories = async () => {
+    if (!leaveEdit()) return
+    const find = prompt('Texte à remplacer dans les noms de catégories.\nUne expression régulière est acceptée ; celle proposée retire « Cours 03 – », « Cours 07-08 – », etc.', '^Cours \\d+(-\\d+)? [–-] ')
+    if (!find) return
+    const by = prompt('Remplacer par (laisser vide pour retirer) :', '')
+    if (by === null) return
+    let re: RegExp
+    try {
+      re = new RegExp(find, 'u')
+    } catch {
+      return alert('Expression invalide : ' + find)
+    }
+    const fn = (path: string) => (path ? mapCategory(path, (parts) => parts.map((p) => p.replace(re, by).trim() || p)) : path)
+    const before = [...new Set([...categories.map((c) => c.path), ...questions.map((q) => q.category)])]
+    const moved = before.filter((p) => fn(p) !== p)
+    if (!moved.length) return say('Aucun nom de catégorie ne contient ce texte.')
+    const sample = moved.slice(0, 6).map((p) => `• ${categoryLabel(p)}\n   → ${categoryLabel(fn(p))}`).join('\n')
+    if (!confirm(`${moved.length} catégorie${moved.length > 1 ? 's' : ''} à renommer :\n\n${sample}${moved.length > 6 ? `\n… et ${moved.length - 6} autre${moved.length - 6 > 1 ? 's' : ''}` : ''}\n\nContinuer ?`)) return
+    const r = await bank.renameCategories(fn)
+    setCat(null)
+    say(`${moved.length} catégorie${moved.length > 1 ? 's' : ''} renommée${moved.length > 1 ? 's' : ''} (${r.questions} question${r.questions > 1 ? 's' : ''} concernée${r.questions > 1 ? 's' : ''}).`)
+  }
+  const removeEmptyCategories = async () => {
+    const n = emptyPaths.length
+    if (!n || !confirm(`Supprimer ${n} catégorie${n > 1 ? 's' : ''} vide${n > 1 ? 's' : ''} ?\n\n${emptyPaths.slice(0, 10).map((p) => '• ' + categoryLabel(p)).join('\n')}${n > 10 ? '\n…' : ''}`)) return
+    await bank.removeCategories(emptyPaths)
+    if (cat !== null && !questions.some((q) => categoryKey(q.category) === cat || categoryKey(q.category).startsWith(cat + SEP))) setCat(null)
+    say(`${n} catégorie${n > 1 ? 's' : ''} vide${n > 1 ? 's' : ''} supprimée${n > 1 ? 's' : ''}.`)
+  }
 
   const filtered = useMemo(() => {
     const words = fold(query).split(/\s+/).filter(Boolean)
@@ -694,6 +768,19 @@ export default function App() {
             <div className="col-grip g-list" {...grip('list', 1)} />
             <aside className="sidebar">
               <div className="side-title">Catégories</div>
+              <div className="cat-tools">
+                <button disabled={!activeNode || activeNode.label.startsWith('(')} title={activeNode ? 'Renommer la catégorie sélectionnée' : 'Sélectionnez d’abord une catégorie'} onClick={renameCategory}>
+                  Renommer
+                </button>
+                <button title="Rechercher et remplacer dans les noms de toutes les catégories (par exemple retirer « Cours 03 – »)" onClick={replaceInCategories}>
+                  Remplacer…
+                </button>
+                {emptyPaths.length > 0 && (
+                  <button className="danger" title="Supprimer les catégories qui ne contiennent plus aucune question" onClick={removeEmptyCategories}>
+                    Vides ({emptyPaths.length}) ✕
+                  </button>
+                )}
+              </div>
               <button className={'cat' + (cat === null ? ' active' : '')} onClick={() => setCat(null)}>
                 <span className="grow">Toutes les questions</span>
                 <span className="count">{questions.length}</span>
