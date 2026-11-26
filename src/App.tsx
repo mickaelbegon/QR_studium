@@ -234,6 +234,16 @@ export default function App() {
   const examTotal = exam ? questions.filter((q) => exam.items.includes(q.id)).length : 0
   const picks = (n: number) => exam && <span className={'in-exam' + (n ? '' : ' none')} title={`${n} question${n > 1 ? 's' : ''} de cette catégorie dans l’examen « ${exam.name} »`}>({n})</span>
 
+  // Dans les menus, on n'affiche pas les niveaux communs à toutes les catégories (« KIN2024 – Banque… »).
+  const commonDepth = useMemo(() => {
+    const all = [...new Set([...categories.map((c) => c.path), ...questions.map((q) => q.category)])].filter(Boolean).map(categoryParts)
+    if (all.length < 2) return 0
+    let n = 0
+    while (all.every((p) => p.length > n + 1 && p[n] === all[0][n])) n++
+    return n
+  }, [questions, categories])
+  const shortLabel = (path: string) => (path ? categoryParts(path).slice(commonDepth).join(' › ') : categoryLabel(path))
+
   // ---- Catégories : renommer, remplacer dans les noms, supprimer les vides ----
   const activeNode = tree.find((n) => n.key === cat) ?? null
   const emptyPaths = useMemo(() => {
@@ -961,7 +971,7 @@ export default function App() {
                           .sort((a, b) => a.path.localeCompare(b.path, 'fr'))
                           .map((c) => (
                             <option key={c.path} value={c.path}>
-                              {categoryLabel(c.path)}
+                              {shortLabel(c.path)}
                             </option>
                           ))}
                         <option value={NEW_CATEGORY}>+ Nouvelle catégorie…</option>
@@ -1038,7 +1048,7 @@ export default function App() {
                         .sort((a, b) => a.path.localeCompare(b.path, 'fr'))
                         .map((c) => (
                           <option key={c.path} value={c.path} disabled={c.path === current.category}>
-                            {categoryLabel(c.path)}
+                            {shortLabel(c.path)}
                           </option>
                         ))}
                     </select>

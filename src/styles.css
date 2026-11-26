@@ -242,7 +242,9 @@ details > summary { cursor: pointer; color: var(--muted); }
 .suggestion button.done { background: var(--ok-soft); border-color: #9fd4b0; color: var(--ok); }
 .backup { font-size: 12px; color: var(--muted); }
 .backup.bad { color: var(--err); font-weight: 600; }
-.review button.done { background: var(--ok-soft); border-color: #9fd4b0; color: var(--ok); }
+.review button.done { background: var(--ok); border-color: var(--ok); color: #fff; font-weight: 600; box-shadow: 0 1px 2px rgba(16, 24, 40, 0.2); }
+.review button.done:hover:not(:disabled) { filter: brightness(1.08); color: #fff; }
+.review .chip.todo { font-size: 11px; padding: 2px 9px; }
 .move { max-width: 180px; }
 .bulk { display: flex; align-items: center; gap: 8px; min-height: 28px; font-size: 13px; }
 .bulk button { padding: 3px 9px; }

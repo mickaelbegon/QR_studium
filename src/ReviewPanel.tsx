@@ -30,9 +30,12 @@ export function ReviewBox({ q, onChange, onCorrected, onRemove }: { q: Question;
       </div>
       <div className="row">
         {(r.direction !== 'Garder' || r.probleme || r.correction || r.cle) && (
-          <button className="done" onClick={onCorrected} title="Passe la direction à « Garder », efface le problème et la correction, et range la question dans la catégorie de sa pertinence">
-            ✓ Marquer comme corrigée
-          </button>
+          <>
+            <span className={'chip todo ' + (r.direction === 'Améliorer' ? 'improve' : 'fix')}>{r.direction === 'Améliorer' ? 'À améliorer' : 'À corriger'}</span>
+            <button className="primary done" onClick={onCorrected} title="Passe la direction à « Garder », efface le problème et la correction, et range la question dans la catégorie de sa pertinence">
+              J’ai corrigé cette question
+            </button>
+          </>
         )}
         <span className="grow" />
         <button className="danger" onClick={onRemove} title="Retire entièrement la note de révision de cette question">
