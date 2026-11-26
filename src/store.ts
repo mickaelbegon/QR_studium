@@ -136,6 +136,27 @@ export function useBank() {
     return { questions: changed.length, categories: renamed }
   }, [])
 
+  /** Questions dont le titre change, d'après une table identifiant d'origine → nouveau titre. Rien n'est écrit. */
+  const planTitles = useCallback((titles: Map<number, string>): UpdatePlan => {
+    const updates: Question[] = []
+    let same = 0
+    const found = new Set<number>()
+    for (const q of ref.current.questions) {
+      const o = originId(q)
+      const name = o === null ? undefined : titles.get(o)
+      if (o === null || name === undefined) continue
+      found.add(o)
+      if (name === qName(q)) {
+        same++
+        continue
+      }
+      const next = structuredClone(q)
+      setText(next, 'name', { ...(getText(next, 'name') ?? { files: [] }), text: name })
+      updates.push(next)
+    }
+    return { updates, same, unknown: titles.size - found.size, files: new Map() }
+  }, [])
+
   /** Change la catégorie de plusieurs questions (identifiant → chemin). Pas d'entrée d'historique : le contenu ne change pas. */
   const moveQuestions = useCallback(async (to: Map<string, string>) => {
     const changed = ref.current.questions.filter((q) => to.has(q.id) && to.get(q.id) !== q.category).map((q) => ({ ...q, category: to.get(q.id)! }))
@@ -305,7 +326,7 @@ export function useBank() {
     setReports([])
   }, [])
 
-  return { questions, categories, exams, reports, loaded, nextOrder, importXml, importReport, renameCategories, removeCategories, moveQuestions, importProposals, planUpdate, applyUpdate, saveQuestion, updateMeta, saveMeta, duplicate, removeQuestion, removeQuestions, restore, restoreExams, saveExam, removeExam, clear }
+  return { questions, categories, exams, reports, loaded, nextOrder, importXml, importReport, planTitles, renameCategories, removeCategories, moveQuestions, importProposals, planUpdate, applyUpdate, saveQuestion, updateMeta, saveMeta, duplicate, removeQuestion, removeQuestions, restore, restoreExams, saveExam, removeExam, clear }
 }
 
 export type Bank = ReturnType<typeof useBank>

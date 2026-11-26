@@ -30,6 +30,22 @@ const stamp = () => {
   return `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}`
 }
 const fileSafe = (s: string) => s.replace(/[^\p{L}\p{N}_-]+/gu, '_').slice(0, 60) || 'questions'
+/** Table de titres d'un fichier JSON [{ id_origine, nouveau }] ; `null` si le fichier est autre chose. */
+function parseTitles(text: string): Map<number, string> | null {
+  let data: unknown
+  try {
+    data = JSON.parse(text)
+  } catch {
+    return null
+  }
+  if (!Array.isArray(data) || !data.length || !data.every((x) => x && typeof x === 'object' && 'id_origine' in x && typeof (x as { nouveau?: unknown }).nouveau === 'string')) return null
+  const out = new Map<number, string>()
+  for (const x of data as { id_origine: string | number; nouveau: string }[]) {
+    const id = parseInt(String(x.id_origine), 10)
+    if (Number.isFinite(id) && x.nouveau.trim()) out.set(id, x.nouveau.trim())
+  }
+  return out
+}
 const NEW_CATEGORY = '\u0000nouvelle'
 const AUTO_KEY = 'qr.auto'
 const FRESH_KEY = 'qr.fresh'
@@ -297,6 +313,19 @@ export default function App() {
       }
       // Le rapport passe après le XML pour retrouver ses questions.
       for (const f of json) {
+        // Un fichier de titres : [{ id_origine, nouveau }]. Seul le titre des questions reconnues change.
+        const titles = parseTitles(await f.text())
+        if (titles) {
+          const plan = bank.planTitles(titles)
+          const n = plan.updates.length
+          const rest = `${plan.same} déjà à jour` + (plan.unknown ? `, ${plan.unknown} sans correspondance` : '')
+          if (!n) msgs.push(`« ${f.name} » : aucun titre à changer (${rest})`)
+          else if (confirm(`« ${f.name} » renomme ${n} question${n > 1 ? 's' : ''} (${rest}).\n\n${plan.updates.slice(0, 6).map((q) => '• ' + qName(q)).join('\n')}${n > 6 ? '\n…' : ''}\n\nSeul le titre change ; l’ancien reste dans l’historique. Continuer ?`)) {
+            await bank.applyUpdate(plan, `Titre renommé depuis ${f.name}`)
+            msgs.push(`« ${f.name} » : ${n} question${n > 1 ? 's' : ''} renommée${n > 1 ? 's' : ''}`)
+          } else msgs.push(`« ${f.name} » : renommage annulé`)
+          continue
+        }
         // Un fichier de propositions de distracteurs se reconnaît à son contenu.
         const proposals = parseProposals(await f.text())
         if (proposals) {

@@ -1,5 +1,5 @@
 import { spawn, spawnSync } from 'node:child_process'
-import { createReadStream, createWriteStream, mkdirSync, readFileSync, readdirSync, renameSync, statSync, unlinkSync } from 'node:fs'
+import { copyFileSync, createReadStream, createWriteStream, mkdirSync, readFileSync, readdirSync, renameSync, statSync, unlinkSync } from 'node:fs'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { tmpdir } from 'node:os'
 import { basename, join } from 'node:path'
@@ -218,9 +218,25 @@ function dataPrive(): Plugin {
           const out = createWriteStream(tmp)
           out.on('error', fail)
           req.on('error', fail)
-          out.on('finish', () => {
+          out.on('finish', async () => {
             try {
-              renameSync(tmp, join(SAVE_DIR, name))
+              // Sous Windows, le remplacement échoue tant qu'un autre programme (antivirus, éditeur, indexation)
+              // tient l'ancienne sauvegarde ouverte : on réessaie, puis on recopie par-dessus en dernier recours.
+              const target = join(SAVE_DIR, name)
+              for (let attempt = 0; ; attempt++) {
+                try {
+                  renameSync(tmp, target)
+                  break
+                } catch (e) {
+                  if (attempt < 8) {
+                    await new Promise((r) => setTimeout(r, 250))
+                    continue
+                  }
+                  copyFileSync(tmp, target)
+                  unlinkSync(tmp)
+                  break
+                }
+              }
               const prefix = name.split('-')[0]
               const old = readdirSync(SAVE_DIR)
                 .filter((f) => SAVE_NAME.test(f) && f.startsWith(prefix + '-'))
@@ -230,7 +246,9 @@ function dataPrive(): Plugin {
               for (const f of old) unlinkSync(join(SAVE_DIR, f))
               res.setHeader('Content-Type', 'application/json')
               res.end(JSON.stringify({ ok: true, dossier: 'data_prive/sauvegardes', fichier: name }))
-            } catch {
+            } catch (e) {
+              // La raison s'affiche dans la fenêtre de lancement, pour pouvoir la diagnostiquer.
+              console.error(`[sauvegarde] ${name} n'a pas pu être écrite :`, e instanceof Error ? e.message : e)
               fail()
             }
           })
