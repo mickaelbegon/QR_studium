@@ -208,3 +208,7 @@ Outils en ligne de commande :
   Word / OnlyOffice d'une banque Moodle XML sans toucher au texte ni aux images.
 - `QR_XML=<fichier.xml> [QR_OUT=<rapport.txt>] npx vitest run tests/verifier.test.ts` : vérifie un
   fichier Moodle XML avec l'analyseur et les alertes de l'application.
+
+## Licence
+
+Code sous licence MIT (voir `LICENSE`). La licence couvre l'application, pas les banques de questions que vous y chargez.
