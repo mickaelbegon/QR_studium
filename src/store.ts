@@ -136,6 +136,21 @@ export function useBank() {
     return { questions: changed.length, categories: renamed }
   }, [])
 
+  /** Change la catégorie de plusieurs questions (identifiant → chemin). Pas d'entrée d'historique : le contenu ne change pas. */
+  const moveQuestions = useCallback(async (to: Map<string, string>) => {
+    const changed = ref.current.questions.filter((q) => to.has(q.id) && to.get(q.id) !== q.category).map((q) => ({ ...q, category: to.get(q.id)! }))
+    const byId = new Map(changed.map((q) => [q.id, q]))
+    const cats = [...ref.current.categories]
+    for (const q of changed) if (q.category && !cats.some((c) => c.path === q.category)) cats.push({ path: q.category })
+    await db.putQuestions(changed)
+    if (cats.length !== ref.current.categories.length) {
+      await db.putCategories(cats)
+      setCategories(cats)
+    }
+    setQuestions(ref.current.questions.map((q) => byId.get(q.id) ?? q))
+    return changed.length
+  }, [])
+
   /** Supprime des catégories (vides) de la liste. */
   const removeCategories = useCallback(async (paths: string[]) => {
     const gone = new Set(paths)
@@ -290,7 +305,7 @@ export function useBank() {
     setReports([])
   }, [])
 
-  return { questions, categories, exams, reports, loaded, nextOrder, importXml, importReport, renameCategories, removeCategories, importProposals, planUpdate, applyUpdate, saveQuestion, updateMeta, saveMeta, duplicate, removeQuestion, removeQuestions, restore, restoreExams, saveExam, removeExam, clear }
+  return { questions, categories, exams, reports, loaded, nextOrder, importXml, importReport, renameCategories, removeCategories, moveQuestions, importProposals, planUpdate, applyUpdate, saveQuestion, updateMeta, saveMeta, duplicate, removeQuestion, removeQuestions, restore, restoreExams, saveExam, removeExam, clear }
 }
 
 export type Bank = ReturnType<typeof useBank>

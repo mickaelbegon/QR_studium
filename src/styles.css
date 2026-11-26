@@ -362,3 +362,5 @@ body.resizing { cursor: col-resize; user-select: none; }
 /* Outils des catégories */
 .cat-tools { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 4px; flex-shrink: 0; }
 .cat-tools button { font-size: 12px; padding: 2px 7px; }
+.bulk { flex-wrap: wrap; }
+.bulk select.move { max-width: 190px; font-size: 13px; padding: 3px 6px; }

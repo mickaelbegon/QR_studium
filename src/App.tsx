@@ -30,6 +30,7 @@ const stamp = () => {
   return `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}`
 }
 const fileSafe = (s: string) => s.replace(/[^\p{L}\p{N}_-]+/gu, '_').slice(0, 60) || 'questions'
+const NEW_CATEGORY = '\u0000nouvelle'
 const AUTO_KEY = 'qr.auto'
 const FRESH_KEY = 'qr.fresh'
 // Une case à cocher ne bloque pas les raccourcis clavier.
@@ -168,16 +169,19 @@ export default function App() {
       const parts = categoryParts(q.category)
       parts.forEach((_, i) => nodes.get(parts.slice(0, i + 1).join(SEP))!.count++)
     }
-    // Ordre de l'arbre : celui de la banque (première question de chaque catégorie), pas l'ordre alphabétique,
-    // pour que les cours restent dans l'ordre même sans numéro dans leur nom. Les catégories vides vont à la fin.
-    const first = new Map<string, number>()
+    // Ordre de l'arbre : celui de la banque (rang médian des questions de chaque catégorie), pas l'ordre alphabétique,
+    // pour que les cours restent dans l'ordre même sans numéro dans leur nom. La médiane ne bouge pas quand on
+    // déplace quelques questions d'une catégorie à l'autre. Les catégories vides vont à la fin.
+    const orders = new Map<string, number[]>()
     for (const q of questions) {
       const parts = categoryParts(q.category)
       parts.forEach((_, i) => {
         const key = parts.slice(0, i + 1).join(SEP)
-        first.set(key, Math.min(first.get(key) ?? Infinity, q.meta.order))
+        const list = orders.get(key)
+        list ? list.push(q.meta.order) : orders.set(key, [q.meta.order])
       })
     }
+    const first = new Map([...orders].map(([k, v]) => [k, v.sort((x, y) => x - y)[v.length >> 1]]))
     const rank = (key: string) => {
       const parts = key.split(SEP)
       return parts.map((label, i) => ({ at: first.get(parts.slice(0, i + 1).join(SEP)) ?? Infinity, label }))
@@ -480,6 +484,28 @@ export default function App() {
     else on ? next.add(id) : next.delete(id)
     lastPick.current = id
     setPicked(next)
+  }
+  /** Déplace les questions cochées ; `target` vide = demander le chemin d'une nouvelle catégorie. */
+  const movePicked = async (target: string) => {
+    const moving = pickedShown
+    if (!moving.length || !leaveEdit()) return
+    let category = target
+    if (target === NEW_CATEGORY) {
+      const base = moving[0].category || categories[0]?.path || ''
+      const typed = prompt('Chemin de la nouvelle catégorie (niveaux séparés par « › ») :', base ? categoryLabel(base) : '')?.trim()
+      if (!typed) return
+      const parts = typed.split('›').map((s) => s.trim()).filter(Boolean)
+      if (!parts.length) return
+      category = base ? mapCategory(base, () => parts) : '$course$/top/' + parts.map((s) => s.replace(/\//g, '//')).join('/')
+    }
+    const before = new Map(moving.map((q) => [q.id, q.category]))
+    const n = await bank.moveQuestions(new Map(moving.map((q) => [q.id, category])))
+    if (!n) return say('Ces questions sont déjà dans cette catégorie.')
+    setPicked(new Set())
+    say(`${n} question${n > 1 ? 's' : ''} déplacée${n > 1 ? 's' : ''} vers « ${categoryLabel(category)} ».`, async () => {
+      await bank.moveQuestions(before)
+      say(`${n} question${n > 1 ? 's' : ''} remise${n > 1 ? 's' : ''} dans ${n > 1 ? 'leur catégorie' : 'sa catégorie'} d’origine.`)
+    })
   }
   const deletePicked = async () => {
     const gone = pickedShown
@@ -859,6 +885,17 @@ export default function App() {
                   {pickedShown.length > 0 && (
                     <>
                       <button onClick={() => setPicked(new Set())}>Décocher</button>
+                      <select className="move" value="" title="Déplacer les questions cochées vers une autre catégorie" onChange={(e) => e.target.value && movePicked(e.target.value)}>
+                        <option value="">Déplacer ({pickedShown.length}) vers…</option>
+                        {[...categories]
+                          .sort((a, b) => a.path.localeCompare(b.path, 'fr'))
+                          .map((c) => (
+                            <option key={c.path} value={c.path}>
+                              {categoryLabel(c.path)}
+                            </option>
+                          ))}
+                        <option value={NEW_CATEGORY}>+ Nouvelle catégorie…</option>
+                      </select>
                       <button className="danger solid" onClick={deletePicked}>
                         Supprimer ({pickedShown.length})
                       </button>
