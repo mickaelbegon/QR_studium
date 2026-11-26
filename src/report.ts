@@ -187,5 +187,12 @@ export function backupNotes(report: Report | undefined, questions: Question[], e
   base.autres_questions = questions
     .filter((q) => (q.meta.review?.origine ?? originId(q)) == null && (q.meta.status || q.meta.note || (q.meta.review && !q.meta.review.removed)))
     .map((q) => ({ nom: name(q), etat_application: q.meta.status || null, note_privee: q.meta.note || null, note_de_revision: q.meta.review ?? null }))
+  // Difficulté et temps estimé : même format que le fichier de scores, pour être réimportés tels quels.
+  base.difficulte_temps = questions
+    .filter((q) => q.meta.difficulty || q.meta.minutes)
+    .map((q) => {
+      const o = q.meta.review?.origine ?? originId(q)
+      return { cle: o != null ? String(o) : 'T:' + name(q), difficulte: q.meta.difficulty ?? null, temps_min: q.meta.minutes ?? null }
+    })
   return JSON.stringify(base, null, 2)
 }

@@ -10,6 +10,7 @@ import { Issues, QuestionPreview } from './Preview'
 import { type Report, type Suggestion, backupNotes, correctedCategory, exportReport, sameTags, syncTags } from './report'
 import { DIRECTIONS, PERTINENCES, ReportView, ReviewBox, directionClass } from './ReviewPanel'
 import { ProposalBox, parseProposals } from './Proposals'
+import { DIFFICULTY, parseScores, scoreLabel, stats, statsLabel } from './scores'
 import { useBank } from './store'
 import { tidyQuestion } from './tidy'
 import { StudentView } from './Student'
@@ -73,6 +74,7 @@ export default function App() {
   const [fStatus, setFStatus] = useState('')
   const [fIssues, setFIssues] = useState(false)
   const [fProp, setFProp] = useState(false)
+  const [fDiff, setFDiff] = useState('')
   const [cat, setCat] = useState<string | null>(null)
   const [examId, setExamIdRaw] = useState<string | null>(() => {
     try {
@@ -302,6 +304,7 @@ export default function App() {
       if (fStatus && (q.meta.status || 'aucun') !== fStatus) return false
       if (fIssues && !worst(issues.get(q.id) ?? [])) return false
       if (fProp && !q.meta.proposal) return false
+      if (fDiff && String(q.meta.difficulty ?? 'aucune') !== fDiff) return false
       if (fPert && (q.meta.review?.pertinence ?? '') !== fPert) return false
       if (fDir && (q.meta.review?.direction ?? '') !== fDir) return false
       if (cat !== null) {
@@ -311,7 +314,7 @@ export default function App() {
       const text = index.get(q.id) ?? ''
       return words.every((w) => text.includes(w))
     })
-  }, [questions, query, fType, fStatus, fIssues, fProp, fPert, fDir, cat, index, issues])
+  }, [questions, query, fType, fStatus, fIssues, fProp, fDiff, fPert, fDir, cat, index, issues])
 
   const current = questions.find((q) => q.id === sel) ?? null
   const types = useMemo(() => [...new Set(questions.map((q) => q.type))], [questions])
@@ -353,6 +356,13 @@ export default function App() {
             await bank.applyUpdate(plan, `Titre renommé depuis ${f.name}`)
             msgs.push(`« ${f.name} » : ${n} question${n > 1 ? 's' : ''} renommée${n > 1 ? 's' : ''}`)
           } else msgs.push(`« ${f.name} » : renommage annulé`)
+          continue
+        }
+        // Un fichier de scores : [{ cle, difficulte, temps_min }].
+        const scores = parseScores(await f.text())
+        if (scores) {
+          const r = await bank.importScores(scores)
+          msgs.push(`« ${f.name} » : difficulté et temps appliqués à ${r.matched} question${r.matched > 1 ? 's' : ''} sur ${r.total}`)
           continue
         }
         // Un fichier de propositions de distracteurs se reconnaît à son contenu.
@@ -452,7 +462,10 @@ export default function App() {
               let exams = 0
               if (notes) {
                 try {
-                  exams = await bank.restoreExams(JSON.parse(await notes.text()).examens ?? [])
+                  const saved = JSON.parse(await notes.text())
+                  exams = await bank.restoreExams(saved.examens ?? [])
+                  const scores = parseScores(JSON.stringify(saved.difficulte_temps ?? null))
+                  if (scores) await bank.importScores(scores)
                 } catch {
                   /* fichier de notes sans examens */
                 }
@@ -761,6 +774,11 @@ export default function App() {
               </select>
             </label>
           )}
+          {view === 'bank' && exam && statsLabel(stats(examQuestions(exam), points)) && (
+            <span className="exam-stats" title="Difficulté moyenne et temps total estimé de l’examen en cours">
+              {statsLabel(stats(examQuestions(exam), points))}
+            </span>
+          )}
           {backup && backup !== 'error' && (
             <span className="backup" title="Sauvegarde automatique dans data_prive/sauvegardes">
               {backup === 'pending' ? 'Modifications à sauvegarder…' : backup === 'saving' ? 'Sauvegarde…' : `Sauvegardé à ${backup}`}
@@ -931,6 +949,17 @@ export default function App() {
                   </select>
                 </>
               )}
+              {questions.some((q) => q.meta.difficulty) && (
+                <select value={fDiff} onChange={(e) => setFDiff(e.target.value)}>
+                  <option value="">Toutes les difficultés</option>
+                  {[1, 2, 3, 4, 5].map((d) => (
+                    <option key={d} value={d}>
+                      Difficulté {d} – {DIFFICULTY[d]}
+                    </option>
+                  ))}
+                  <option value="aucune">Sans difficulté</option>
+                </select>
+              )}
               <label className="check">
                 <input type="checkbox" checked={fIssues} onChange={(e) => setFIssues(e.target.checked)} />
                 Avec alertes seulement
@@ -984,6 +1013,7 @@ export default function App() {
                 </div>
                 <div className="list-count">
                   {filtered.length} question{filtered.length > 1 ? 's' : ''} · {+filtered.reduce((s, q) => s + points(q), 0).toFixed(2)} points
+                  {statsLabel(stats(filtered, points)) && ' · ' + statsLabel(stats(filtered, points))}
                 </div>
               </div>
               <div className="rows">
@@ -1001,6 +1031,7 @@ export default function App() {
                         </div>
                         <div className="q-snippet">{plain(getText(q, 'questiontext')?.text).slice(0, 140)}</div>
                       </div>
+                      {scoreLabel(q) && <span className={'score d' + (q.meta.difficulty ?? 0)} title={(q.meta.difficulty ? `Difficulté ${q.meta.difficulty} sur 5 (${DIFFICULTY[q.meta.difficulty]})` : 'Difficulté non notée') + (q.meta.minutes ? ` · temps estimé ${q.meta.minutes} min` : '')}>{scoreLabel(q)}</span>}
                       {q.meta.review?.pertinence && <span className="pert" title={'Pertinence ' + q.meta.review.pertinence.toLowerCase()}>{q.meta.review.pertinence[0]}</span>}
                       {(q.meta.review?.direction === 'Améliorer' || q.meta.review?.direction === 'Corriger avant usage') && (
                         <span className={'chip ' + directionClass(q.meta.review.direction)} title={q.meta.review.probleme}>
@@ -1085,6 +1116,18 @@ export default function App() {
                         </option>
                       ))}
                     </select>
+                    <select value={current.meta.difficulty ?? ''} title="Difficulté, de 1 (rappel) à 5 (synthèse)" onChange={(e) => bank.updateMeta(current.id, { difficulty: e.target.value ? +e.target.value : undefined })}>
+                      <option value="">Difficulté —</option>
+                      {[1, 2, 3, 4, 5].map((d) => (
+                        <option key={d} value={d}>
+                          {d} – {DIFFICULTY[d]}
+                        </option>
+                      ))}
+                    </select>
+                    <label className="minutes" title="Temps de réponse estimé, en minutes">
+                      <input key={current.id + ':' + (current.meta.minutes ?? '')} type="number" min="0" step="0.5" defaultValue={current.meta.minutes ?? ''} placeholder="—" onBlur={(e) => (+e.target.value || undefined) !== current.meta.minutes && bank.updateMeta(current.id, { minutes: +e.target.value || undefined })} />
+                      min
+                    </label>
                     <input key={current.id} className="grow" placeholder="Note privée (non exportée)" defaultValue={current.meta.note} onBlur={(e) => e.target.value !== current.meta.note && bank.updateMeta(current.id, { note: e.target.value })} />
                   </div>
                   {exams.some((e) => e.items.includes(current.id)) && (

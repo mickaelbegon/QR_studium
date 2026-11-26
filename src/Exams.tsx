@@ -5,6 +5,7 @@ import { QuestionPreview } from './Preview'
 import type { Bank } from './store'
 
 /** Points de la question ; pour un cloze sans note explicite, c'est la somme des poids des trous. */
+import { fmtMin, scoreLabel, stats } from './scores'
 export function points(q: Question): number {
   const grade = getProp(q, 'defaultgrade')
   if (grade === undefined && q.type === 'cloze') return parseCloze(getText(q, 'questiontext')?.text ?? '').reduce((s, p) => s + p.weight, 0)
@@ -19,6 +20,7 @@ export function ExamsView({ bank, examId, setExamId, onExport, onPrint }: { bank
   const items = exam ? exam.items.map((id) => byId.get(id)).filter((q): q is Question => !!q) : []
   const selected = items.find((q) => q.id === sel) ?? items[0] ?? null
   const total = items.reduce((s, q) => s + points(q), 0)
+  const st = stats(items, points)
 
   const create = async () => {
     const name = prompt('Nom de l’examen :', 'Nouvel examen')
@@ -91,12 +93,35 @@ export function ExamsView({ bank, examId, setExamId, onExport, onPrint }: { bank
                 </button>
               </div>
             </div>
+            {items.length > 0 && (
+              <div className="exam-summary">
+                <div>
+                  <strong>Difficulté moyenne : {st.mean !== null ? st.mean.toLocaleString('fr-CA', { maximumFractionDigits: 1 }) + ' / 5' : '—'}</strong>
+                  {st.weighted !== null && st.mean !== null && Math.abs(st.weighted - st.mean) >= 0.05 && <span className="hint"> (pondérée par les points : {st.weighted.toLocaleString('fr-CA', { maximumFractionDigits: 1 })})</span>}
+                  {st.noDifficulty > 0 && <span className="hint"> · {st.noDifficulty} question{st.noDifficulty > 1 ? 's' : ''} sans difficulté</span>}
+                </div>
+                <div>
+                  <strong>Temps total estimé : {st.minutes ? fmtMin(st.minutes) : '—'}</strong>
+                  {st.noMinutes > 0 && <span className="hint"> · {st.noMinutes} question{st.noMinutes > 1 ? 's' : ''} sans temps</span>}
+                </div>
+                {st.mean !== null && (
+                  <div className="levels" title="Nombre de questions par niveau de difficulté">
+                    {[1, 2, 3, 4, 5].map((d) => (
+                      <span key={d} className={'score d' + d}>
+                        D{d} : {st.levels[d]}
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
             <div className="rows">
               {items.map((q, i) => (
                 <div key={q.id} className={'q-row' + (selected?.id === q.id ? ' active' : '')} onClick={() => setSel(q.id)}>
                   <span className="num">{i + 1}</span>
                   <span className={'badge t-' + q.type}>{typeShort(q.type)}</span>
                   <span className="grow q-name">{qName(q)}</span>
+                  {scoreLabel(q) && <span className={'score d' + (q.meta.difficulty ?? 0)}>{scoreLabel(q)}</span>}
                   <span className="count">{+points(q).toFixed(2)} pt</span>
                   <button disabled={i === 0} title="Monter" onClick={(e) => (e.stopPropagation(), move(i, -1))}>
                     ↑

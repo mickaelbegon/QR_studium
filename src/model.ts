@@ -73,6 +73,10 @@ export interface QuestionMeta {
   note: string
   review?: Review
   proposal?: Proposal
+  /** Difficulté de 1 (rappel) à 5 (synthèse). */
+  difficulty?: number
+  /** Temps de réponse estimé, en minutes. */
+  minutes?: number
   source?: string
   order: number
   created: number

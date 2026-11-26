@@ -396,3 +396,17 @@ body.resizing { cursor: col-resize; user-select: none; }
 .ddi-drop.g8, .ddi-drag.g8 { background-color: #f0e68c; }
 .ddi-drop.ok.ok { background-color: #d7e9d4; }
 .ddi-drop.bad.bad { background-color: #f5d5d1; }
+
+/* Difficulté et temps estimé */
+.score { font-size: 10px; font-weight: 700; border-radius: 4px; padding: 1px 5px; flex-shrink: 0; white-space: nowrap; background: #eef0f3; color: #556070; }
+.score.d1 { background: #e3f4e8; color: #17753a; }
+.score.d2 { background: #eaf3d8; color: #4d7a12; }
+.score.d3 { background: #fdf1d3; color: #946200; }
+.score.d4 { background: #fde3d0; color: #b54708; }
+.score.d5 { background: #fbd9d5; color: #b42318; }
+.minutes { display: inline-flex; align-items: center; gap: 4px; font-size: 13px; color: var(--muted); }
+.minutes input { width: 62px; }
+.exam-stats { font-size: 12px; color: var(--muted); white-space: nowrap; }
+.exam-summary { padding: 8px 12px; border-bottom: 1px solid var(--line); background: var(--bg); display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
+.exam-summary .levels { display: flex; gap: 6px; flex-wrap: wrap; }
+.exam-summary .score { font-size: 11px; }

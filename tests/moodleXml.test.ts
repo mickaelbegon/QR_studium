@@ -355,3 +355,19 @@ describe('glisser-déposer sur image', () => {
     expect(serializeBank([q], [], () => '')).toContain('<file name="fond.png" encoding="base64">QUJD</file>')
   })
 })
+
+describe('difficulté et temps', () => {
+  it('lit un fichier de scores et résume un examen', async () => {
+    const { parseScores, stats, statsLabel, fmtMin } = await import('../src/scores')
+    expect(parseScores('[{"id_origine": 1, "nouveau": "x"}]')).toBeNull()
+    const s = parseScores(JSON.stringify([{ cle: '42', difficulte: 3, temps_min: 1.5 }, { cle: 'T:Ma question', difficulte: 9, temps_min: 2 }]))!
+    expect(s).toEqual([{ origine: 42, titre: '', difficulty: 3, minutes: 1.5 }, { origine: null, titre: 'Ma question', difficulty: undefined, minutes: 2 }])
+    const mk = (difficulty: number | undefined, minutes: number | undefined, pts: number) => ({ ...newQuestion('multichoice', '', 1), meta: { ...newQuestion('multichoice', '', 1).meta, difficulty, minutes }, pts })
+    const qs = [mk(2, 1, 1), mk(4, 3, 3), mk(undefined, undefined, 1)]
+    const st = stats(qs, (q) => (q as unknown as { pts: number }).pts)
+    expect([st.mean, st.weighted, st.minutes, st.noDifficulty, st.noMinutes]).toEqual([3, 3.5, 4, 1, 1])
+    expect(st.levels).toEqual([0, 0, 1, 0, 1, 0])
+    expect(statsLabel(st)).toBe('difficulté 3 · 4 min')
+    expect(fmtMin(95)).toBe('1 h 35')
+  })
+})

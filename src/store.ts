@@ -4,6 +4,7 @@ import * as db from './db'
 import { clearFiles, loadIntoMemory, registerFiles } from './files'
 import { type Category, type Exam, type Question, getText, qName, setText, uid } from './model'
 import { parseMoodleXml, serializeQuestion, signature } from './moodleXml'
+import type { Score } from './scores'
 import { type Report, applyReport, originId, parseReport } from './report'
 
 /** Clé stable d'une question d'un fichier à l'autre : son identifiant d'origine, sinon son type et son nom. */
@@ -180,6 +181,26 @@ export function useBank() {
     setCategories(cats)
   }, [])
 
+  /** Applique des scores de difficulté et de temps (par identifiant d'origine, sinon par titre). */
+  const importScores = useCallback(async (scores: Score[]) => {
+    const byOrigin = new Map<number, Score>()
+    const byTitle = new Map<string, Score>()
+    for (const s of scores) s.origine !== null ? byOrigin.set(s.origine, s) : byTitle.set(s.titre.trim(), s)
+    const changed: Question[] = []
+    for (const q of ref.current.questions) {
+      const o = originId(q)
+      const s = (o !== null ? byOrigin.get(o) : undefined) ?? byTitle.get(qName(q).trim())
+      if (!s) continue
+      const difficulty = s.difficulty ?? q.meta.difficulty
+      const minutes = s.minutes ?? q.meta.minutes
+      if (difficulty !== q.meta.difficulty || minutes !== q.meta.minutes) changed.push({ ...q, meta: { ...q.meta, difficulty, minutes } })
+    }
+    const byId = new Map(changed.map((q) => [q.id, q]))
+    await db.putQuestions(changed)
+    setQuestions(ref.current.questions.map((q) => byId.get(q.id) ?? q))
+    return { matched: changed.length, total: scores.length }
+  }, [])
+
   /** Rattache des propositions de distracteurs aux questions, par identifiant d'origine. */
   const importProposals = useCallback(async (proposals: Map<number, Question['meta']['proposal']>) => {
     const changed: Question[] = []
@@ -326,7 +347,7 @@ export function useBank() {
     setReports([])
   }, [])
 
-  return { questions, categories, exams, reports, loaded, nextOrder, importXml, importReport, planTitles, renameCategories, removeCategories, moveQuestions, importProposals, planUpdate, applyUpdate, saveQuestion, updateMeta, saveMeta, duplicate, removeQuestion, removeQuestions, restore, restoreExams, saveExam, removeExam, clear }
+  return { questions, categories, exams, reports, loaded, nextOrder, importXml, importReport, importScores, planTitles, renameCategories, removeCategories, moveQuestions, importProposals, planUpdate, applyUpdate, saveQuestion, updateMeta, saveMeta, duplicate, removeQuestion, removeQuestions, restore, restoreExams, saveExam, removeExam, clear }
 }
 
 export type Bank = ReturnType<typeof useBank>
