@@ -364,3 +364,33 @@ body.resizing { cursor: col-resize; user-select: none; }
 .cat-tools button { font-size: 12px; padding: 2px 7px; }
 .bulk { flex-wrap: wrap; }
 .bulk select.move { max-width: 190px; font-size: 13px; padding: 3px 6px; }
+.cat .in-exam { font-size: 12px; font-weight: 700; color: var(--accent); flex-shrink: 0; }
+.cat .in-exam.none { font-weight: 400; color: #b3bac6; }
+
+/* Glisser-déposer sur image */
+.ddi { display: flex; flex-direction: column; gap: 8px; }
+.ddi-outer { width: 100%; overflow: hidden; }
+.ddi-inner { position: relative; transform-origin: 0 0; }
+.ddi-inner > img { display: block; max-width: none; user-select: none; }
+.ddi-drop { position: absolute; box-sizing: border-box; border: 1px solid #5f6b7a; border-radius: 3px; background: rgba(255, 255, 255, 0.9); font-size: 13px; line-height: 1.2; display: flex; align-items: center; justify-content: center; text-align: center; overflow: hidden; white-space: nowrap; color: #1d2125; }
+.ddi-student .ddi-drop { cursor: pointer; }
+.ddi-drop.target { outline: 2px dashed var(--accent); outline-offset: 1px; }
+.ddi-drop.ok { border: 2px solid #357a32; background: #d7e9d4; }
+.ddi-drop.bad { border: 2px solid #ca3120; background: #f5d5d1; }
+.ddi-edit .ddi-drop { cursor: move; font-weight: 700; touch-action: none; }
+.ddi-palette { display: flex; flex-direction: column; gap: 6px; }
+.ddi-group { display: flex; flex-wrap: wrap; gap: 6px; }
+.ddi-drag { font-size: 13px; padding: 3px 8px; border: 1px solid #5f6b7a; border-radius: 3px; color: #1d2125; cursor: grab; }
+.ddi-drag.held { outline: 2px solid var(--accent); outline-offset: 1px; }
+.ddi-drag.spare { border-style: dashed; color: var(--muted); }
+.ddi-answers .ddi-drag { cursor: default; }
+.ddi-drop.g1, .ddi-drag.g1 { background-color: #fff; }
+.ddi-drop.g2, .ddi-drag.g2 { background-color: #b0c4de; }
+.ddi-drop.g3, .ddi-drag.g3 { background-color: #dcdcdc; }
+.ddi-drop.g4, .ddi-drag.g4 { background-color: #d8bfd8; }
+.ddi-drop.g5, .ddi-drag.g5 { background-color: #87cefa; }
+.ddi-drop.g6, .ddi-drag.g6 { background-color: #daa520; }
+.ddi-drop.g7, .ddi-drag.g7 { background-color: #ffd700; }
+.ddi-drop.g8, .ddi-drag.g8 { background-color: #f0e68c; }
+.ddi-drop.ok.ok { background-color: #d7e9d4; }
+.ddi-drop.bad.bad { background-color: #f5d5d1; }

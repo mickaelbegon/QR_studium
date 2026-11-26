@@ -1,4 +1,6 @@
 import { useMemo } from 'react'
+import { DdBoard } from './DdBoard'
+import { readDd } from './ddimage'
 import { dragBoxes, dropZones } from './dragbox'
 import { renderRt } from './files'
 import type { Issue } from './lint'
@@ -18,7 +20,7 @@ const TF: Record<string, string> = { true: 'Vrai', false: 'Faux' }
 export function QuestionPreview({ q, showAnswers = true }: { q: Question; showAnswers?: boolean }) {
   const single = getProp(q, 'single') !== 'false'
   const general = getText(q, 'generalfeedback')
-  const known = ['multichoice', 'truefalse', 'matching', 'cloze', 'description', 'shortanswer', 'numerical', 'essay', 'ddwtos'].includes(q.type)
+  const known = ['multichoice', 'truefalse', 'matching', 'cloze', 'description', 'shortanswer', 'numerical', 'essay', 'ddwtos', 'ddimageortext'].includes(q.type)
   // Glisser-déposer sur texte : chaque zone [[n]] montre le choix attendu.
   const statement = getText(q, 'questiontext')
   const drags = useMemo(() => (q.type === 'ddwtos' ? dragBoxes(q).map((b) => b.box) : []), [q])
@@ -34,6 +36,8 @@ export function QuestionPreview({ q, showAnswers = true }: { q: Question; showAn
   return (
     <div className="preview">
       <Html rt={body} cloze={q.type === 'cloze'} showAnswers={showAnswers} />
+
+      {q.type === 'ddimageortext' && <DdImagePreview q={q} showAnswers={showAnswers} />}
 
       {q.type === 'ddwtos' && drags.length > 0 && (
         <p className="choices">
@@ -131,6 +135,12 @@ export function QuestionPreview({ q, showAnswers = true }: { q: Question; showAn
       )}
     </div>
   )
+}
+
+/** Glisser-déposer sur image : l'image avec ses zones, remplies quand le corrigé est affiché. */
+function DdImagePreview({ q, showAnswers }: { q: Question; showAnswers: boolean }) {
+  const model = useMemo(() => readDd(q), [q.extra])
+  return <DdBoard model={model} mode={showAnswers ? 'answers' : 'student'} done={!showAnswers} />
 }
 
 export function Issues({ issues }: { issues: Issue[] }) {

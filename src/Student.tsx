@@ -4,6 +4,8 @@ import { useMemo, useRef, useState } from 'react'
 import { type ClozePart, parseCloze } from './cloze'
 import { points } from './Exams'
 import { dragBoxes } from './dragbox'
+import { DdBoard } from './DdBoard'
+import { gradeDd, readDd } from './ddimage'
 import { renderRt } from './files'
 import { getUnits, gradeNumerical, unitChoice } from './units'
 import { type Answer, type Question, type RichText, getProp, getText, plain } from './model'
@@ -94,12 +96,15 @@ function Attempt({ q, number, onRetry }: { q: Question; number: number; onRetry:
   const [pairs, setPairs] = useState<Record<string, string>>({})
   const [typed, setTyped] = useState('')
   const [unit, setUnit] = useState('')
+  const [placed, setPlaced] = useState<Record<number, number>>({})
+  const [held, setHeld] = useState<number | null>(null)
   const [result, setResult] = useState<{ fraction: number | null; answered: boolean } | null>(null)
   const inline = useRef<HTMLDivElement>(null)
 
   const type = q.type
   const single = getProp(q, 'single') !== 'false'
-  const mix = isOn(getProp(q, 'shuffleanswers'))
+  // Glisser-déposer sur image : la seule présence de la balise <shuffleanswers> active le mélange.
+  const mix = q.type === 'ddimageortext' ? getProp(q, 'shuffleanswers') !== undefined : isOn(getProp(q, 'shuffleanswers'))
   const max = points(q)
   const text = getText(q, 'questiontext')
   const interactiveText = type === 'cloze' || type === 'ddwtos'
@@ -113,6 +118,8 @@ function Attempt({ q, number, onRetry }: { q: Question; number: number; onRetry:
   const choices = useMemo(() => shuffle([...new Set(q.subquestions.map((s) => s.answer.trim()).filter(Boolean))]), [])
   const drags = useMemo(() => (type === 'ddwtos' ? dragChoices(q) : []), [])
   const parts = useMemo(() => (type === 'cloze' ? parseCloze(text?.text ?? '') : []), [])
+  const dd = useMemo(() => (type === 'ddimageortext' ? readDd(q) : null), [])
+  const ddOrder = useMemo(() => (dd ? (mix ? shuffle(dd.drags) : dd.drags).map((d) => d.no) : []), [])
 
   const inlineHtml = useMemo(() => {
     if (type === 'cloze') return renderRt(text, { cloze: true, interactive: true })
@@ -157,6 +164,10 @@ function Attempt({ q, number, onRetry }: { q: Question; number: number; onRetry:
         }
       })
       fraction = total ? got / total : 0
+    } else if (dd) {
+      answered = Object.keys(placed).length > 0
+      fraction = gradeDd(dd, placed)
+      setHeld(null)
     } else if (type === 'ddwtos' && inline.current) {
       const selects = [...inline.current.querySelectorAll<HTMLSelectElement>('select[data-dd]')]
       answered = selects.some((s) => s.value)
@@ -277,6 +288,24 @@ function Attempt({ q, number, onRetry }: { q: Question; number: number; onRetry:
             </div>
           )}
 
+          {dd && (
+            <DdBoard
+              model={dd}
+              mode="student"
+              placed={placed}
+              held={held}
+              done={done}
+              order={ddOrder}
+              onHold={setHeld}
+              onPlace={(drop, drag) => {
+                const next = { ...placed }
+                if (drag === null) delete next[drop]
+                else next[drop] = drag
+                setPlaced(next)
+              }}
+            />
+          )}
+
           {type === 'essay' && <textarea className="stu-essay" rows={8} disabled={done} placeholder="L’étudiant rédige sa réponse ici (correction manuelle)." />}
         </div>
 
@@ -294,6 +323,7 @@ function Attempt({ q, number, onRetry }: { q: Question; number: number; onRetry:
             {type === 'matching' && <div className="stu-right">La réponse correcte est : {rows.map((s) => `${plain(s.rt.text)} → ${s.answer}`).join(' ; ')}</div>}
             {(type === 'shortanswer' || type === 'numerical') && rightAnswers[0] && <div className="stu-right">La réponse correcte est : {rightAnswers[0].rt.text}</div>}
             {type === 'ddwtos' && <div className="stu-right">La réponse correcte est : {drags.map((d) => `[${plain(d)}]`).join(' ')}</div>}
+            {dd && <div className="stu-right">La réponse correcte est : {dd.drops.map((z) => `${z.no} → ${dd.drags.find((d) => d.no === z.choice)?.text ?? '?'}`).join(' ; ')}</div>}
             {type === 'cloze' && <div className="stu-right">Survolez chaque champ pour voir sa rétroaction et la réponse attendue.</div>}
           </div>
         )}

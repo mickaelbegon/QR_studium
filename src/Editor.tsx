@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
+import { DdBoard } from './DdBoard'
+import { type DdDrag, type DdDrop, isDdExtra, readDd, removeDrag, setBackground, writeDd } from './ddimage'
 import { type DragBox, dragBoxXml, dragBoxes, dropZones } from './dragbox'
 import { fileUrl, readAsBase64, registerFile, renderRt, unresolve } from './files'
 import { lintQuestion } from './lint'
@@ -179,6 +181,17 @@ export function QuestionEditor({ question, categories, onSave, onCancel, onDirty
       if (rt) setText(q, 'questiontext', { ...rt, text: rt.text.replace(/\[\[(\d+)\]\]/g, (m, k) => (+k > n ? `[[${+k - 1}]]` : m)) })
     })
   /** Réglage que l'éditeur ne sait pas encore modifier (conservé tel quel). */
+  // ---- Glisser-déposer sur image : étiquettes, zones, image de fond ----
+  const ddi = d.type === 'ddimageortext' ? readDd(d) : null
+  const bgInput = useRef<HTMLInputElement>(null)
+  const editDd = (fn: (drags: DdDrag[], drops: DdDrop[]) => { drags: DdDrag[]; drops: DdDrop[] } | void) =>
+    mut((q) => {
+      const m = readDd(q)
+      const r = fn(m.drags, m.drops) ?? m
+      writeDd(q, r.drags, r.drops)
+    })
+  const ddShuffle = getProp(d, 'shuffleanswers') !== undefined
+
   // ---- Question numérique : unités ----
   const units = d.type === 'numerical' ? getUnits(d) : []
   const uMode = d.type === 'numerical' ? unitMode(d) : 'none'
@@ -188,7 +201,7 @@ export function QuestionEditor({ question, categories, onSave, onCancel, onDirty
       fn(u)
       setUnits(q, u)
     })
-  const locked = d.extra.some((x) => !(d.type === 'ddwtos' && /^<dragbox[\s>]/.test(x)) && !(d.type === 'numerical' && isUnits(x))) || d.answers.some((a) => a.extra.some((x) => !TOL.test(x)))
+  const locked = d.extra.some((x) => !(d.type === 'ddwtos' && /^<dragbox[\s>]/.test(x)) && !(d.type === 'numerical' && isUnits(x)) && !(d.type === 'ddimageortext' && isDdExtra(x))) || d.answers.some((a) => a.extra.some((x) => !TOL.test(x)))
 
   const positiveSum = d.answers.map((a) => parseFloat(a.fraction) || 0).filter((f) => f > 0).reduce((a, b) => a + b, 0)
 
@@ -288,6 +301,108 @@ export function QuestionEditor({ question, categories, onSave, onCancel, onDirty
                 <li className="warn">Mélange désactivé : l’étudiant voit les choix dans l’ordre ci-dessus, la solution se lit donc dans l’ordre.</li>
               </ul>
             )}
+          </div>
+        )}
+
+        {ddi && (
+          <div className="field">
+            <div className="label">Image et zones de dépôt</div>
+            <p className="hint">Faites glisser une zone sur l’image pour la déplacer. Le numéro affiché est celui de la zone ; la liste plus bas dit quelle étiquette elle attend.</p>
+            <DdBoard model={ddi} mode="edit" onMove={(no, x, y) => editDd((drags, drops) => ({ drags, drops: drops.map((z) => (z.no === no ? { ...z, x, y } : z)) }))} />
+            <div className="row">
+              <button onClick={() => bgInput.current?.click()}>Changer l’image de fond…</button>
+              <span className="hint">{ddi.bgName || '(aucune image)'}</span>
+              <input
+                ref={bgInput}
+                type="file"
+                accept="image/*"
+                hidden
+                onChange={async (e) => {
+                  const f = e.target.files?.[0]
+                  e.target.value = ''
+                  if (!f) return
+                  const data = await readAsBase64(f)
+                  mut((q) => setBackground(q, f.name, data))
+                }}
+              />
+              <label className="check" title="Les étiquettes sont présentées à l’étudiant dans un ordre aléatoire">
+                <input
+                  type="checkbox"
+                  checked={ddShuffle}
+                  onChange={(e) =>
+                    mut((q) => {
+                      // Pour ce type de question, Moodle lit la présence de la balise, pas sa valeur.
+                      q.fields = q.fields.filter((f) => !(f.kind === 'prop' && f.tag === 'shuffleanswers'))
+                      if (e.target.checked) q.fields.push({ kind: 'prop', tag: 'shuffleanswers', value: '' })
+                    })
+                  }
+                />
+                Mélanger les étiquettes
+              </label>
+            </div>
+
+            <div className="label">Étiquettes</div>
+            <p className="hint">Une étiquette ne se dépose que dans les zones de son groupe (une couleur par groupe). « Réutilisable » : elle peut servir dans plusieurs zones. Une étiquette qu’aucune zone n’attend est un leurre.</p>
+            {ddi.drags.map((g) => {
+              const used = ddi.drops.some((z) => z.choice === g.no)
+              return (
+                <div className="drag-row" key={g.no}>
+                  <code className={used ? 'used' : ''} title={used ? 'Attendue par au moins une zone' : 'Leurre'}>
+                    {g.no}
+                  </code>
+                  <input className="grow" value={g.text} placeholder={g.file ? 'Texte de remplacement de l’image' : 'Texte de l’étiquette'} onChange={(e) => editDd((drags, drops) => ({ drags: drags.map((x) => (x.no === g.no ? { ...x, text: e.target.value } : x)), drops }))} />
+                  {g.file && <span className="hint">image</span>}
+                  <select value={g.group} title="Groupe" onChange={(e) => editDd((drags, drops) => ({ drags: drags.map((x) => (x.no === g.no ? { ...x, group: e.target.value } : x)), drops }))}>
+                    {[...new Set(['1', '2', '3', '4', '5', '6', '7', '8', g.group])].map((n) => (
+                      <option key={n} value={n}>
+                        Groupe {n}
+                      </option>
+                    ))}
+                  </select>
+                  <label className="check">
+                    <input type="checkbox" checked={g.infinite} onChange={(e) => editDd((drags, drops) => ({ drags: drags.map((x) => (x.no === g.no ? { ...x, infinite: e.target.checked } : x)), drops }))} />
+                    Réutilisable
+                  </label>
+                  <button className="danger" disabled={used} title={used ? 'Une zone attend cette étiquette : changez d’abord la zone' : 'Supprimer cette étiquette'} onClick={() => editDd((drags, drops) => removeDrag({ bgName: '', bgData: '', drags, drops }, g.no))}>
+                    ✕
+                  </button>
+                </div>
+              )
+            })}
+            <div>
+              <button onClick={() => editDd((drags, drops) => ({ drags: [...drags, { no: drags.length + 1, text: '', group: drags[drags.length - 1]?.group ?? '1', infinite: false, file: '' }], drops }))}>+ Ajouter une étiquette</button>
+            </div>
+
+            <div className="label">Zones de dépôt</div>
+            {ddi.drops.map((z) => (
+              <div className="drag-row" key={z.no}>
+                <code className="used">{z.no}</code>
+                <input className="grow" value={z.label} placeholder="Description de la zone (lecteurs d’écran)" onChange={(e) => editDd((drags, drops) => ({ drags, drops: drops.map((x) => (x.no === z.no ? { ...x, label: e.target.value } : x)) }))} />
+                <select value={z.choice} title="Étiquette attendue" onChange={(e) => editDd((drags, drops) => ({ drags, drops: drops.map((x) => (x.no === z.no ? { ...x, choice: +e.target.value } : x)) }))}>
+                  {ddi.drags.map((g) => (
+                    <option key={g.no} value={g.no}>
+                      {g.no}. {g.text || '(image)'}
+                    </option>
+                  ))}
+                </select>
+                <label className="check" title="Position du coin supérieur gauche de la zone, en pixels de l’image">
+                  x
+                  <input type="number" style={{ width: 68 }} value={z.x} onChange={(e) => editDd((drags, drops) => ({ drags, drops: drops.map((x) => (x.no === z.no ? { ...x, x: +e.target.value || 0 } : x)) }))} />
+                </label>
+                <label className="check">
+                  y
+                  <input type="number" style={{ width: 68 }} value={z.y} onChange={(e) => editDd((drags, drops) => ({ drags, drops: drops.map((x) => (x.no === z.no ? { ...x, y: +e.target.value || 0 } : x)) }))} />
+                </label>
+                <button className="danger" title="Supprimer cette zone" onClick={() => editDd((drags, drops) => ({ drags, drops: drops.filter((x) => x.no !== z.no) }))}>
+                  ✕
+                </button>
+              </div>
+            ))}
+            <div>
+              <button disabled={!ddi.drags.length} onClick={() => editDd((drags, drops) => ({ drags, drops: [...drops, { no: drops.length + 1, label: '', choice: drags[0].no, x: 10, y: 10 }] }))}>
+                + Ajouter une zone
+              </button>
+            </div>
           </div>
         )}
 

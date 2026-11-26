@@ -215,6 +215,25 @@ export default function App() {
     })
   }, [questions, categories])
 
+  const exam = exams.find((e) => e.id === examId) ?? null
+  // Nombre de questions de chaque catégorie déjà retenues dans l'examen en cours.
+  const examCounts = useMemo(() => {
+    const counts = new Map<string, number>()
+    if (!exam) return counts
+    const chosen = new Set(exam.items)
+    for (const q of questions) {
+      if (!chosen.has(q.id)) continue
+      const parts = categoryParts(q.category)
+      parts.forEach((_, i) => {
+        const key = parts.slice(0, i + 1).join(SEP)
+        counts.set(key, (counts.get(key) ?? 0) + 1)
+      })
+    }
+    return counts
+  }, [questions, exam])
+  const examTotal = exam ? questions.filter((q) => exam.items.includes(q.id)).length : 0
+  const picks = (n: number) => exam && <span className={'in-exam' + (n ? '' : ' none')} title={`${n} question${n > 1 ? 's' : ''} de cette catégorie dans l’examen « ${exam.name} »`}>({n})</span>
+
   // ---- Catégories : renommer, remplacer dans les noms, supprimer les vides ----
   const activeNode = tree.find((n) => n.key === cat) ?? null
   const emptyPaths = useMemo(() => {
@@ -285,7 +304,6 @@ export default function App() {
   }, [questions, query, fType, fStatus, fIssues, fProp, fPert, fDir, cat, index, issues])
 
   const current = questions.find((q) => q.id === sel) ?? null
-  const exam = exams.find((e) => e.id === examId) ?? null
   const types = useMemo(() => [...new Set(questions.map((q) => q.type))], [questions])
 
   // ---- Actions ----
@@ -859,11 +877,13 @@ export default function App() {
               </div>
               <button className={'cat' + (cat === null ? ' active' : '')} onClick={() => setCat(null)}>
                 <span className="grow">Toutes les questions</span>
+                {picks(examTotal)}
                 <span className="count">{questions.length}</span>
               </button>
               {tree.map((n) => (
                 <button key={n.key} className={'cat' + (cat === n.key ? ' active' : '')} style={{ paddingLeft: 10 + n.depth * 14 }} onClick={() => setCat(n.key)} title={n.label}>
                   <span className="grow">{n.label}</span>
+                  {picks(examCounts.get(n.key) ?? 0)}
                   <span className="count">{n.count}</span>
                 </button>
               ))}

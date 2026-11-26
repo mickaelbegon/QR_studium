@@ -297,3 +297,61 @@ describe('nettoyage de la mise en forme', () => {
     expect(tidyQuestion(t)).toBeNull()
   })
 })
+
+describe('glisser-déposer sur image', () => {
+  it('lit, note et réécrit étiquettes et zones', async () => {
+    const { dragXml, dropXml, gradeDd, readDd, removeDrag, writeDd } = await import('../src/ddimage')
+    const xml = `<quiz><question type="ddimageortext"><name><text>GDI</text></name><questiontext format="html"><text>Placez.</text></questiontext>
+    <shuffleanswers/>
+    <file name="fond.png" encoding="base64">QUJD</file>
+    <drag>
+      <no>1</no>
+      <text>Fémur &amp; co</text>
+      <draggroup>1</draggroup>
+    </drag>
+    <drag>
+      <no>2</no>
+      <text>Leurre</text>
+      <draggroup>1</draggroup>
+    </drag>
+    <drag>
+      <no>3</no>
+      <text>Oui</text>
+      <draggroup>2</draggroup>
+      <infinite/>
+    </drag>
+    <drop>
+      <text>Zone A</text>
+      <no>1</no>
+      <choice>1</choice>
+      <xleft>10</xleft>
+      <ytop>20</ytop>
+    </drop>
+    <drop>
+      <text>Zone B</text>
+      <no>2</no>
+      <choice>3</choice>
+      <xleft>30</xleft>
+      <ytop>40</ytop>
+    </drop></question></quiz>`
+    const q = parseMoodleXml(xml, 't').questions[0]
+    const m = readDd(q)
+    expect([m.bgName, m.bgData]).toEqual(['fond.png', 'QUJD'])
+    expect(m.drags.map((d) => [d.no, d.text, d.group, d.infinite])).toEqual([[1, 'Fémur & co', '1', false], [2, 'Leurre', '1', false], [3, 'Oui', '2', true]])
+    expect(m.drops.map((d) => [d.no, d.choice, d.x, d.y])).toEqual([[1, 1, 10, 20], [2, 3, 30, 40]])
+    // Réécrits sans changement, ils redonnent le même XML.
+    const raw = q.extra.filter((x) => /^<(drag|drop)/.test(x))
+    expect([...m.drags.map(dragXml), ...m.drops.map(dropXml)]).toEqual(raw)
+    expect(gradeDd(m, { 1: 1, 2: 3 })).toBe(1)
+    expect(gradeDd(m, { 1: 2, 2: 3 })).toBe(0.5)
+    expect(gradeDd(m, {})).toBe(0)
+    // Supprimer le leurre renumérote l'étiquette suivante et la zone qui l'attend.
+    const r = removeDrag(m, 2)
+    writeDd(q, r.drags, r.drops)
+    const m2 = readDd(q)
+    expect(m2.drags.map((d) => d.text)).toEqual(['Fémur & co', 'Oui'])
+    expect(m2.drops.map((d) => d.choice)).toEqual([1, 2])
+    expect(m2.bgData).toBe('QUJD')
+    expect(serializeBank([q], [], () => '')).toContain('<file name="fond.png" encoding="base64">QUJD</file>')
+  })
+})
