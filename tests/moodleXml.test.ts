@@ -276,3 +276,24 @@ describe('catégories', () => {
     expect(strip('')).toBe('')
   })
 })
+
+describe('nettoyage de la mise en forme', () => {
+  it('retire paragraphes vides et sauts de ligne en trop sans toucher au texte', async () => {
+    const { tidyHtml, tidyQuestion } = await import('../src/tidy')
+    expect(tidyHtml('<p><p>La force est\nproportionnelle.</p><br></p>')).toBe('<p>La force est proportionnelle.</p>')
+    expect(tidyHtml('<p></p><p>Quel\nmouvement&nbsp;?</p><br><p></p>')).toBe('<p>Quel mouvement&nbsp;?</p>')
+    expect(tidyHtml('Pédalage<br>')).toBe('Pédalage')
+    expect(tidyHtml('<p>&nbsp;</p><p>a<br>b</p><p><br></p>')).toBe('<p>a<br>b</p>')
+    expect(tidyHtml('<p></p>\n<p>a</p>\n<p>b <em>c</em> d</p>\n<p></p>')).toBe('<p>a</p><p>b <em>c</em> d</p>')
+    // Rien à retirer : rendu tel quel, à l'octet près.
+    for (const same of ['<p>a<br>b</p>', '<p>Texte\nsur deux lignes</p>', '<p><img src="@@PLUGINFILE@@/a.png" alt=""></p>', 'true', '<p>x</p>\n<p>y <strong>z</strong></p>'])
+      expect(tidyHtml(same)).toBe(same)
+    expect(tidyHtml('<p><img src="@@PLUGINFILE@@/a.png" alt=""><br></p><p></p>')).toBe('<p><img src="@@PLUGINFILE@@/a.png" alt=""></p>')
+    const q = parseMoodleXml(`<quiz><question type="multichoice"><name><text>Q</text></name><questiontext format="html"><text><![CDATA[<p>ok</p>]]></text></questiontext>
+      <answer fraction="100" format="html"><text><![CDATA[<p><p>bonne</p><br></p>]]></text></answer>
+      <answer fraction="0" format="html"><text><![CDATA[<p>autre</p>]]></text></answer></question></quiz>`, 't').questions[0]
+    const t = tidyQuestion(q)!
+    expect(t.answers.map((a) => a.rt.text)).toEqual(['<p>bonne</p>', '<p>autre</p>'])
+    expect(tidyQuestion(t)).toBeNull()
+  })
+})

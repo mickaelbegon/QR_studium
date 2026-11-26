@@ -11,6 +11,7 @@ import { type Report, type Suggestion, backupNotes, correctedCategory, exportRep
 import { DIRECTIONS, PERTINENCES, ReportView, ReviewBox, directionClass } from './ReviewPanel'
 import { ProposalBox, parseProposals } from './Proposals'
 import { useBank } from './store'
+import { tidyQuestion } from './tidy'
 import { StudentView } from './Student'
 import { ClaudePanel } from './Claude'
 
@@ -339,6 +340,23 @@ export default function App() {
       say(msgs.join(' · ') + '.')
     } catch (e) {
       alert('Import impossible : ' + (e instanceof Error ? e.message : String(e)))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  /** Retire les paragraphes vides et les sauts de ligne en trop dans toutes les questions. */
+  const tidyAll = async () => {
+    if (!leaveEdit()) return
+    const updates = questions.map(tidyQuestion).filter((q): q is Question => !!q)
+    const n = updates.length
+    if (!n) return say('Rien à nettoyer : aucune question n’a de paragraphe vide ni de saut de ligne en trop.')
+    const names = updates.slice(0, 8).map((q) => '• ' + (qName(q) || '(sans nom)')).join('\n')
+    if (!confirm(`${n} question${n > 1 ? 's ont' : ' a'} des paragraphes vides ou des sauts de ligne en trop (énoncé, réponses ou rétroactions).\n\n${names}${n > 8 ? `\n… et ${n - 8} autre${n - 8 > 1 ? 's' : ''}` : ''}\n\nLe texte et les images ne changent pas ; la version actuelle de chaque question reste dans son historique. Nettoyer ?`)) return
+    setBusy(true)
+    try {
+      await bank.applyUpdate({ updates, same: 0, unknown: 0, files: new Map() }, 'Mise en forme nettoyée')
+      say(`Mise en forme nettoyée dans ${n} question${n > 1 ? 's' : ''}.`)
     } finally {
       setBusy(false)
     }
@@ -756,6 +774,9 @@ export default function App() {
               <hr />
               <button disabled={busy || !questions.length} title="Remplace le contenu des questions déjà dans la banque par celui d’un fichier Moodle XML corrigé. Les questions sont reconnues par leur identifiant d’origine ou leur nom ; rien n’est ajouté." onClick={() => updateInput.current?.click()}>
                 Appliquer un fichier corrigé (XML)…
+              </button>
+              <button disabled={busy || !questions.length} title="Retire les paragraphes vides et les sauts de ligne en trop (restes de copier-coller) dans les énoncés, réponses et rétroactions. Le texte ne change pas." onClick={tidyAll}>
+                Nettoyer la mise en forme…
               </button>
               <input ref={updateInput} type="file" accept=".xml" hidden onChange={(e) => updateFromFile(e.target.files?.[0]).then(() => (e.target.value = ''))} />
               <button
