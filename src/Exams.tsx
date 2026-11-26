@@ -5,6 +5,7 @@ import { QuestionPreview } from './Preview'
 import type { Bank } from './store'
 
 /** Points de la question ; pour un cloze sans note explicite, c'est la somme des poids des trous. */
+import { ExamChart } from './ExamChart'
 import { LEVELS, levelCounts, levelInfo, levelOf } from './levels'
 import { fmtMin, scoreLabel, stats } from './scores'
 export function points(q: Question): number {
@@ -127,6 +128,7 @@ export function ExamsView({ bank, examId, setExamId, onExport, onPrint }: { bank
                 )}
               </div>
             )}
+            <ExamChart key={exam.id} items={items} points={points} />
             <div className="rows">
               {items.map((q, i) => (
                 <div key={q.id} className={'q-row' + (selected?.id === q.id ? ' active' : '')} onClick={() => setSel(q.id)}>
