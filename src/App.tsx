@@ -10,6 +10,7 @@ import { Issues, QuestionPreview } from './Preview'
 import { type Report, type Suggestion, backupNotes, correctedCategory, exportReport, sameTags, syncTags } from './report'
 import { DIRECTIONS, PERTINENCES, ReportView, ReviewBox, directionClass } from './ReviewPanel'
 import { ProposalBox, parseProposals } from './Proposals'
+import { LEVELS, levelInfo, levelOf, parseLevels, withLevel } from './levels'
 import { DIFFICULTY, parseScores, scoreLabel, stats, statsLabel } from './scores'
 import { useBank } from './store'
 import { tidyQuestion } from './tidy'
@@ -75,6 +76,7 @@ export default function App() {
   const [fIssues, setFIssues] = useState(false)
   const [fProp, setFProp] = useState(false)
   const [fDiff, setFDiff] = useState('')
+  const [fLevel, setFLevel] = useState('')
   const [cat, setCat] = useState<string | null>(null)
   const [examId, setExamIdRaw] = useState<string | null>(() => {
     try {
@@ -305,6 +307,7 @@ export default function App() {
       if (fIssues && !worst(issues.get(q.id) ?? [])) return false
       if (fProp && !q.meta.proposal) return false
       if (fDiff && String(q.meta.difficulty ?? 'aucune') !== fDiff) return false
+      if (fLevel && (levelOf(q) || 'aucun') !== fLevel) return false
       if (fPert && (q.meta.review?.pertinence ?? '') !== fPert) return false
       if (fDir && (q.meta.review?.direction ?? '') !== fDir) return false
       if (cat !== null) {
@@ -314,7 +317,7 @@ export default function App() {
       const text = index.get(q.id) ?? ''
       return words.every((w) => text.includes(w))
     })
-  }, [questions, query, fType, fStatus, fIssues, fProp, fDiff, fPert, fDir, cat, index, issues])
+  }, [questions, query, fType, fStatus, fIssues, fProp, fDiff, fLevel, fPert, fDir, cat, index, issues])
 
   const current = questions.find((q) => q.id === sel) ?? null
   const types = useMemo(() => [...new Set(questions.map((q) => q.type))], [questions])
@@ -356,6 +359,19 @@ export default function App() {
             await bank.applyUpdate(plan, `Titre renommé depuis ${f.name}`)
             msgs.push(`« ${f.name} » : ${n} question${n > 1 ? 's' : ''} renommée${n > 1 ? 's' : ''}`)
           } else msgs.push(`« ${f.name} » : renommage annulé`)
+          continue
+        }
+        // Un fichier de niveaux : [{ cle, niveau }]. Il pose l'étiquette « niveau-… » sur chaque question.
+        const levels = parseLevels(await f.text())
+        if (levels) {
+          const plan = bank.planLevels(levels)
+          const n = plan.updates.length
+          const rest = `${plan.same} déjà à jour` + (plan.unknown ? `, ${plan.unknown} sans correspondance` : '')
+          if (!n) msgs.push(`« ${f.name} » : aucun niveau à changer (${rest})`)
+          else if (confirm(`« ${f.name} » pose une étiquette de niveau sur ${n} question${n > 1 ? 's' : ''} (${rest}).\n\nCes étiquettes (niveau-sait, niveau-comprend…) seront exportées vers StudiUM. La version actuelle de chaque question reste dans son historique. Continuer ?`)) {
+            await bank.applyUpdate(plan, `Niveau attribué depuis ${f.name}`)
+            msgs.push(`« ${f.name} » : niveau attribué à ${n} question${n > 1 ? 's' : ''}`)
+          } else msgs.push(`« ${f.name} » : attribution annulée`)
           continue
         }
         // Un fichier de scores : [{ cle, difficulte, temps_min }].
@@ -949,6 +965,17 @@ export default function App() {
                   </select>
                 </>
               )}
+              {questions.some((q) => levelOf(q)) && (
+                <select value={fLevel} onChange={(e) => setFLevel(e.target.value)}>
+                  <option value="">Tous les niveaux</option>
+                  {LEVELS.map((l) => (
+                    <option key={l.key} value={l.key}>
+                      {l.label}
+                    </option>
+                  ))}
+                  <option value="aucun">Sans niveau</option>
+                </select>
+              )}
               {questions.some((q) => q.meta.difficulty) && (
                 <select value={fDiff} onChange={(e) => setFDiff(e.target.value)}>
                   <option value="">Toutes les difficultés</option>
@@ -1031,6 +1058,7 @@ export default function App() {
                         </div>
                         <div className="q-snippet">{plain(getText(q, 'questiontext')?.text).slice(0, 140)}</div>
                       </div>
+                      {levelOf(q) && <span className="level" title={'Niveau : ' + levelInfo(levelOf(q))!.label + ' — ' + levelInfo(levelOf(q))!.hint}>{levelInfo(levelOf(q))!.short}</span>}
                       {scoreLabel(q) && <span className={'score d' + (q.meta.difficulty ?? 0)} title={(q.meta.difficulty ? `Difficulté ${q.meta.difficulty} sur 5 (${DIFFICULTY[q.meta.difficulty]})` : 'Difficulté non notée') + (q.meta.minutes ? ` · temps estimé ${q.meta.minutes} min` : '')}>{scoreLabel(q)}</span>}
                       {q.meta.review?.pertinence && <span className="pert" title={'Pertinence ' + q.meta.review.pertinence.toLowerCase()}>{q.meta.review.pertinence[0]}</span>}
                       {(q.meta.review?.direction === 'Améliorer' || q.meta.review?.direction === 'Corriger avant usage') && (
@@ -1113,6 +1141,20 @@ export default function App() {
                       {Object.entries(STATUS).map(([k, v]) => (
                         <option key={k} value={k}>
                           {v}
+                        </option>
+                      ))}
+                    </select>
+                    <select
+                      value={levelOf(current)}
+                      title={levelOf(current) ? levelInfo(levelOf(current))!.hint : 'Niveau cognitif : ce que l’étudiant doit faire pour répondre (étiquette exportée vers StudiUM)'}
+                      onChange={async (e) => {
+                        await bank.saveQuestion(withLevel(current, e.target.value), 'Niveau modifié')
+                      }}
+                    >
+                      <option value="">Niveau —</option>
+                      {LEVELS.map((l) => (
+                        <option key={l.key} value={l.key}>
+                          {l.label}
                         </option>
                       ))}
                     </select>

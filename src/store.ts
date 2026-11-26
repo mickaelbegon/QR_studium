@@ -4,6 +4,7 @@ import * as db from './db'
 import { clearFiles, loadIntoMemory, registerFiles } from './files'
 import { type Category, type Exam, type Question, getText, qName, setText, uid } from './model'
 import { parseMoodleXml, serializeQuestion, signature } from './moodleXml'
+import { type LevelEntry, levelOf, withLevel } from './levels'
 import type { Score } from './scores'
 import { type Report, applyReport, originId, parseReport } from './report'
 
@@ -156,6 +157,25 @@ export function useBank() {
       updates.push(next)
     }
     return { updates, same, unknown: titles.size - found.size, files: new Map() }
+  }, [])
+
+  /** Questions dont l'étiquette de niveau change, d'après un fichier de niveaux. Rien n'est écrit. */
+  const planLevels = useCallback((entries: LevelEntry[]): UpdatePlan => {
+    const byOrigin = new Map<number, string>()
+    const byTitle = new Map<string, string>()
+    for (const e of entries) e.origine !== null ? byOrigin.set(e.origine, e.level) : byTitle.set(e.titre.trim(), e.level)
+    const updates: Question[] = []
+    let same = 0
+    let found = 0
+    for (const q of ref.current.questions) {
+      const o = originId(q)
+      const level = (o !== null ? byOrigin.get(o) : undefined) ?? byTitle.get(qName(q).trim())
+      if (!level) continue
+      found++
+      if (levelOf(q) === level) same++
+      else updates.push(withLevel(q, level))
+    }
+    return { updates, same, unknown: entries.length - found, files: new Map() }
   }, [])
 
   /** Change la catégorie de plusieurs questions (identifiant → chemin). Pas d'entrée d'historique : le contenu ne change pas. */
@@ -347,7 +367,7 @@ export function useBank() {
     setReports([])
   }, [])
 
-  return { questions, categories, exams, reports, loaded, nextOrder, importXml, importReport, importScores, planTitles, renameCategories, removeCategories, moveQuestions, importProposals, planUpdate, applyUpdate, saveQuestion, updateMeta, saveMeta, duplicate, removeQuestion, removeQuestions, restore, restoreExams, saveExam, removeExam, clear }
+  return { questions, categories, exams, reports, loaded, nextOrder, importXml, importReport, importScores, planTitles, planLevels, renameCategories, removeCategories, moveQuestions, importProposals, planUpdate, applyUpdate, saveQuestion, updateMeta, saveMeta, duplicate, removeQuestion, removeQuestions, restore, restoreExams, saveExam, removeExam, clear }
 }
 
 export type Bank = ReturnType<typeof useBank>

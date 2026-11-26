@@ -5,6 +5,7 @@ import { QuestionPreview } from './Preview'
 import type { Bank } from './store'
 
 /** Points de la question ; pour un cloze sans note explicite, c'est la somme des poids des trous. */
+import { LEVELS, levelCounts, levelInfo, levelOf } from './levels'
 import { fmtMin, scoreLabel, stats } from './scores'
 export function points(q: Question): number {
   const grade = getProp(q, 'defaultgrade')
@@ -21,6 +22,7 @@ export function ExamsView({ bank, examId, setExamId, onExport, onPrint }: { bank
   const selected = items.find((q) => q.id === sel) ?? items[0] ?? null
   const total = items.reduce((s, q) => s + points(q), 0)
   const st = stats(items, points)
+  const lv = levelCounts(items)
 
   const create = async () => {
     const name = prompt('Nom de l’examen :', 'Nouvel examen')
@@ -104,6 +106,16 @@ export function ExamsView({ bank, examId, setExamId, onExport, onPrint }: { bank
                   <strong>Temps total estimé : {st.minutes ? fmtMin(st.minutes) : '—'}</strong>
                   {st.noMinutes > 0 && <span className="hint"> · {st.noMinutes} question{st.noMinutes > 1 ? 's' : ''} sans temps</span>}
                 </div>
+                {lv.none < items.length && (
+                  <div className="levels" title="Nombre de questions par niveau cognitif">
+                    {LEVELS.map((l, i) => (
+                      <span key={l.key} className="level" title={l.hint}>
+                        {l.label} : {lv.counts[i]}
+                      </span>
+                    ))}
+                    {lv.none > 0 && <span className="hint">sans niveau : {lv.none}</span>}
+                  </div>
+                )}
                 {st.mean !== null && (
                   <div className="levels" title="Nombre de questions par niveau de difficulté">
                     {[1, 2, 3, 4, 5].map((d) => (
@@ -121,6 +133,7 @@ export function ExamsView({ bank, examId, setExamId, onExport, onPrint }: { bank
                   <span className="num">{i + 1}</span>
                   <span className={'badge t-' + q.type}>{typeShort(q.type)}</span>
                   <span className="grow q-name">{qName(q)}</span>
+                  {levelOf(q) && <span className="level">{levelInfo(levelOf(q))!.short}</span>}
                   {scoreLabel(q) && <span className={'score d' + (q.meta.difficulty ?? 0)}>{scoreLabel(q)}</span>}
                   <span className="count">{+points(q).toFixed(2)} pt</span>
                   <button disabled={i === 0} title="Monter" onClick={(e) => (e.stopPropagation(), move(i, -1))}>

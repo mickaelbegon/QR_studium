@@ -167,3 +167,11 @@ Outils en ligne de commande :
   Word / OnlyOffice d'une banque Moodle XML sans toucher au texte ni aux images.
 - `QR_XML=<fichier.xml> [QR_OUT=<rapport.txt>] npx vitest run tests/verifier.test.ts` : vérifie un
   fichier Moodle XML avec l'analyseur et les alertes de l'application.
+
+## Niveau cognitif
+
+Chaque question peut porter une étiquette de niveau, qui dit ce que l'étudiant doit faire pour
+répondre : `niveau-sait`, `niveau-comprend`, `niveau-sait-comment`, `niveau-applique` ou
+`niveau-analyse`. Ce sont de vraies étiquettes Moodle, exportées vers StudiUM. Dans l'application :
+pastille dans la liste, filtre « Niveau », menu sur la question, et répartition par niveau dans le
+résumé d'un examen. Un fichier JSON `[{cle, niveau}]` s'importe comme les autres.

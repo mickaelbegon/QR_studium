@@ -371,3 +371,20 @@ describe('difficulté et temps', () => {
     expect(fmtMin(95)).toBe('1 h 35')
   })
 })
+
+describe('niveau cognitif', () => {
+  it('lit le fichier de niveaux et pose une seule étiquette niveau-…', async () => {
+    const { levelCounts, levelOf, parseLevels, withLevel } = await import('../src/levels')
+    expect(parseLevels('[{"cle": "1", "difficulte": 2}]')).toBeNull()
+    expect(parseLevels(JSON.stringify([{ cle: '42', niveau: 'Sait comment' }, { cle: 'T:Titre', niveau: 'analyse' }, { cle: '7', niveau: 'inconnu' }]))).toEqual([
+      { origine: 42, titre: '', level: 'sait-comment' },
+      { origine: null, titre: 'Titre', level: 'analyse' },
+    ])
+    const q = { ...newQuestion('multichoice', '', 1), tags: ['pertinence-haute', 'niveau-sait', 'id-origine-42'] }
+    expect(levelOf(q)).toBe('sait')
+    const q2 = withLevel(q, 'applique')
+    expect(q2.tags).toEqual(['pertinence-haute', 'id-origine-42', 'niveau-applique'])
+    expect(withLevel(q2, '').tags).toEqual(['pertinence-haute', 'id-origine-42'])
+    expect(levelCounts([q, q2, withLevel(q2, '')])).toEqual({ counts: [1, 0, 0, 1, 0], none: 1 })
+  })
+})
